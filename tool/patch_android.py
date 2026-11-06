@@ -39,3 +39,49 @@ if 'android:scheme="https"' not in s:
 s = re.sub(r'android:label="[^"]*"', 'android:label="GeoMark"', s, count=1)
 manifest.write_text(s, encoding="utf-8")
 print("AndroidManifest actualizado")
+
+# ── Forzar compileSdk 36 en todas las librerías (plugins) ───────────────────
+# Algunos plugins antiguos compilan contra android-33 y las dependencias de
+# AndroidX actuales exigen 34+. Se ajusta tras evaluar cada plugin.
+MARK = "// geomark: compileSdk de plugins"
+kts = pathlib.Path("android/build.gradle.kts")
+groovy = pathlib.Path("android/build.gradle")
+if kts.exists():
+    snippet = f"""{MARK}
+subprojects {{
+    afterEvaluate {{
+        if (plugins.hasPlugin("com.android.library")) {{
+            val androidExt = extensions.findByName("android")
+            try {{
+                androidExt?.javaClass
+                    ?.getMethod("compileSdkVersion", Int::class.javaPrimitiveType)
+                    ?.invoke(androidExt, 36)
+            }} catch (e: Exception) {{
+                println("No se pudo ajustar compileSdk en ${{project.name}}: ${{e.message}}")
+            }}
+        }}
+    }}
+}}
+
+"""
+    target = kts
+else:
+    snippet = f"""{MARK}
+subprojects {{
+    afterEvaluate {{ p ->
+        if (p.plugins.hasPlugin('com.android.library')) {{
+            p.android.compileSdkVersion 36
+        }}
+    }}
+}}
+
+"""
+    target = groovy
+
+g = target.read_text(encoding="utf-8")
+if MARK not in g:
+    # Debe ir ANTES de `evaluationDependsOn(":app")` para registrar afterEvaluate a tiempo.
+    i = g.find("subprojects {")
+    g = (g[:i] + snippet + g[i:]) if i >= 0 else (g + "\n" + snippet)
+    target.write_text(g, encoding="utf-8")
+    print(f"compileSdk de plugins forzado en {target}")
