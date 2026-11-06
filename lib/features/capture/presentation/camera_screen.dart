@@ -7,12 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../app_services.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../templates/watermark_template.dart';
 import '../application/capture_controller.dart';
 import '../domain/capture_record.dart';
 import 'gallery_screen.dart';
 import 'preview_screen.dart';
+import 'widgets/activity_sheet.dart';
+import 'widgets/compass_widget.dart';
 import 'widgets/live_watermark_overlay.dart';
 import 'widgets/template_picker_sheet.dart';
 
@@ -66,6 +69,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     c.initialize();
+    services.compass.start();
   }
 
   @override
@@ -73,6 +77,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _zoomHide?.cancel();
     c.pause(); // libera la cámara y el GPS al salir del visor
+    services.compass.stop();
     super.dispose();
   }
 
@@ -100,6 +105,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       if (mounted) setState(() => _countdown = null);
     }
 
+    // El rumbo se toma EN el disparo (no después de contestar la actividad).
+    final heading = services.compass.heading.value;
+    final logo = await services.logo.bytes();
     HapticFeedback.mediumImpact();
     setState(() => _flashEffect = true); // destello blanco tipo obturador
     Future.delayed(const Duration(milliseconds: 120),
@@ -109,6 +117,11 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       final record = await c.capture(
         config: widget.templates.value,
         inspectionId: widget.inspectionId,
+        heading: heading,
+        logo: logo,
+        askActivity: services.settings.value.askActivity && mounted
+            ? () => askActivity(context)
+            : null,
       );
       if (!mounted) return;
       if (widget.inspectionId != null) {
@@ -216,6 +229,31 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                         templates: widget.templates, clock: c.nowForPreview),
                   ),
                 ]),
+              ),
+
+              // 3b. Brújula (centro, bajo la barra superior) y logotipo (derecha)
+              Positioned(
+                top: pad.top + 62,
+                left: 0,
+                right: 0,
+                child: Center(child: CompassWidget(heading: services.compass.heading)),
+              ),
+              Positioned(
+                top: pad.top + 62,
+                right: 14,
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: services.logo,
+                  builder: (_, path, __) => path == null
+                      ? const SizedBox.shrink()
+                      : Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Image.file(File(path), height: 34, fit: BoxFit.contain),
+                        ),
+                ),
               ),
 
               // 4. Indicador de zoom

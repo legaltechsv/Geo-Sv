@@ -56,6 +56,14 @@ dependencies:
   # Ajustes (institución, inspector)
   shared_preferences: ^2.3.2
 
+  # Logotipo: elegir de la galería o descargar desde un enlace de Internet
+  image_picker: ^1.1.2
+  http: ^1.2.2
+  # Brújula (rumbo hacia donde apunta la cámara)
+  flutter_compass: ^0.8.1
+  # Generar reportes Word (.docx = ZIP con XML)
+  archive: '>=3.6.0 <5.0.0'
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

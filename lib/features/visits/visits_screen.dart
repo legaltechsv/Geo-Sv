@@ -45,10 +45,13 @@ class _VisitsScreenState extends State<VisitsScreen> {
   Future<void> _export(List<VisitedPlace> places) async {
     setState(() => _exporting = true);
     try {
+      final logo = await services.logo.bytes();
+      final range = _range;
       final bytes = await services.reports.visitsReport(
         places: places,
-        range: _range,
+        range: range,
         settings: services.settings.value,
+        logo: logo,
       );
       if (!mounted) return;
       final stamp = DateFormat('yyyyMMdd').format(DateTime.now());
@@ -59,6 +62,13 @@ class _VisitsScreenState extends State<VisitsScreen> {
             title: 'Lugares visitados',
             fileName: 'Visitas_${_range.label.replaceAll(' ', '')}_$stamp.pdf',
             bytes: bytes,
+            shareText: 'Reporte de lugares visitados · ${range.label}',
+            buildDocx: () => services.reports.visitsDocx(
+              places: places,
+              range: range,
+              settings: services.settings.value,
+              logo: logo,
+            ),
           ),
         ),
       );

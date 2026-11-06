@@ -1,7 +1,9 @@
 import 'core/geocoding/geocoding_service.dart';
+import 'core/location/compass_service.dart';
 import 'core/location/location_service.dart';
 import 'core/permissions/permission_service.dart';
 import 'core/time/trusted_time_service.dart';
+import 'features/branding/logo_service.dart';
 import 'features/capture/application/capture_controller.dart';
 import 'features/capture/data/capture_repository.dart';
 import 'features/inspections/data/inspection_repository.dart';
@@ -27,6 +29,8 @@ class AppServices {
   final settings = SettingsService();
   final templates = TemplateController();
   final reports = ReportService();
+  final compass = CompassService();
+  final logo = LogoService();
 
   late final location = LocationService();
   late final camera = CaptureController(
@@ -43,6 +47,7 @@ class AppServices {
 
   Future<void> init() async {
     await settings.load();
+    await logo.load();
     sync.start();
   }
 }

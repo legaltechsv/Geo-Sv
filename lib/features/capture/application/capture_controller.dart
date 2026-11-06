@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:crypto/crypto.dart';
@@ -205,6 +206,9 @@ class CaptureController extends ChangeNotifier {
   Future<CaptureRecord> capture({
     WatermarkConfig config = const WatermarkConfig(),
     String? inspectionId,
+    double? heading,
+    Uint8List? logo,
+    Future<String?> Function()? askActivity,
   }) async {
     final cam = camera;
     if (cam == null || !cam.value.isInitialized) {
@@ -238,6 +242,13 @@ class CaptureController extends ChangeNotifier {
             'Se detectó una ubicación simulada. La captura fue bloqueada.');
       }
 
+      // 2b. Preguntar la actividad. GPS y hora YA quedaron fijados en el
+      //     disparo, así que el tiempo que tarde en responder no altera la
+      //     evidencia. Se pregunta antes de estampar para incluirla en la foto.
+      final rawActivity = askActivity == null ? null : await askActivity();
+      final activity =
+          (rawActivity == null || rawActivity.trim().isEmpty) ? null : rawActivity.trim();
+
       // 3. Hora confiable y datos derivados.
       final t = time.now(gnssTimestamp: fix.timestamp);
       final id = const Uuid().v4();
@@ -255,6 +266,9 @@ class CaptureController extends ChangeNotifier {
           address: address,
           verificationCode: code,
           config: config,
+          heading: heading,
+          activity: activity,
+          logo: logo,
         ),
       );
 
@@ -290,6 +304,8 @@ class CaptureController extends ChangeNotifier {
         verificationCode: code,
         fileSha256: fileHash,
         inspectionId: inspectionId,
+        heading: heading,
+        activity: activity,
       );
       await repository.insert(record);
       lastRecord.value = record;

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -127,11 +129,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: const TextStyle(color: AppColors.cyan, fontSize: 13)),
                     ]),
                   ),
-                  GlassCard(
-                    radius: 16,
-                    padding: const EdgeInsets.all(10),
-                    onTap: () => widget.onNavigate(3),
-                    child: const Icon(Icons.person_outline),
+                  ValueListenableBuilder<String?>(
+                    valueListenable: services.logo,
+                    builder: (_, path, __) => GlassCard(
+                      radius: 16,
+                      padding: EdgeInsets.all(path == null ? 10 : 6),
+                      onTap: () => widget.onNavigate(3),
+                      child: path == null
+                          ? const Icon(Icons.add_photo_alternate_outlined)
+                          : Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                  color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                              child: Image.file(File(path), height: 40, width: 64, fit: BoxFit.contain),
+                            ),
+                    ),
                   ),
                 ]),
               ),

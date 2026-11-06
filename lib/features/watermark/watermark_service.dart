@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../core/location/compass_service.dart';
 import '../../core/time/trusted_time_service.dart';
 import '../../core/utils/maps_link.dart';
 import '../templates/watermark_template.dart';
@@ -23,6 +24,9 @@ class WatermarkData {
     required this.verificationCode,
     this.brandLabel = 'GeoMark',
     this.config = const WatermarkConfig(),
+    this.heading,
+    this.activity,
+    this.logo,
   });
 
   final double latitude;
@@ -35,6 +39,13 @@ class WatermarkData {
 
   /// Plantilla elegida en el visor (estilo, proyecto, nota, campos visibles).
   final WatermarkConfig config;
+
+  /// Rumbo de la cámara (grados) y actividad indicada por el usuario.
+  final double? heading;
+  final String? activity;
+
+  /// Logotipo PNG que se estampa en la esquina superior derecha.
+  final Uint8List? logo;
 
   /// Lo que codifica el QR: enlace universal a Google Maps.
   String get qrPayload => MapsLink.search(latitude, longitude);
@@ -97,6 +108,9 @@ class WatermarkService {
     );
     final lines = <String>[
       MapsLink.coordsText(data.latitude, data.longitude),
+      if (data.activity != null) 'Actividad: ${data.activity}',
+      if (data.heading != null && !minimal)
+        'Dirección de la foto: ${CompassService.label(data.heading!)}',
       if (cfg.showAccuracy && !minimal)
         'Precisión GPS: ±${data.accuracy.toStringAsFixed(0)} m',
       if (cfg.showAddress && !minimal)
@@ -189,6 +203,32 @@ class WatermarkService {
     canvas.translate(qrLeft + qrQuiet, qrTop + qrQuiet);
     qr.paint(canvas, Size.square(qrBox - qrQuiet * 2));
     canvas.restore();
+
+    // 6b. Logotipo en la esquina superior derecha, sobre fondo blanco
+    //     redondeado para que se lea sobre cualquier foto.
+    if (data.logo != null) {
+      try {
+        final lc = await ui.instantiateImageCodec(data.logo!);
+        final logo = (await lc.getNextFrame()).image;
+        lc.dispose();
+        final maxW = 22 * u, maxH = 11 * u;
+        final s = math.min(maxW / logo.width, maxH / logo.height);
+        final lw = logo.width * s, lh = logo.height * s;
+        final lpad = 1.4 * u;
+        final box = Rect.fromLTWH(w - pad - lw - lpad * 2, pad, lw + lpad * 2, lh + lpad * 2);
+        canvas.drawRRect(RRect.fromRectAndRadius(box, Radius.circular(1.6 * u)),
+            Paint()..color = const Color(0xE6FFFFFF));
+        canvas.drawImageRect(
+          logo,
+          Rect.fromLTWH(0, 0, logo.width.toDouble(), logo.height.toDouble()),
+          Rect.fromLTWH(box.left + lpad, box.top + lpad, lw, lh),
+          Paint()..filterQuality = ui.FilterQuality.high,
+        );
+        logo.dispose();
+      } catch (_) {
+        // Un logo dañado nunca debe impedir guardar la evidencia.
+      }
+    }
 
     // 7. Rasterizar y pasar a RGBA crudo.
     final picture = recorder.endRecording();

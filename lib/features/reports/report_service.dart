@@ -7,7 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../core/location/compass_service.dart';
 import '../capture/domain/capture_record.dart';
+import 'docx_builder.dart';
 import '../inspections/domain/checklist_templates.dart';
 import '../inspections/domain/inspection.dart';
 import '../settings/settings_service.dart';
@@ -48,8 +50,10 @@ class ReportService {
     required List<ChecklistItem> items,
     required List<CaptureRecord> photos,
     required AppSettings settings,
+    Uint8List? logo,
   }) async {
     final t = ChecklistTemplates.byKey(inspection.templateKey);
+    final logoImg = logo == null ? null : pw.MemoryImage(logo);
     final sum = ComplianceSummary(items);
     final findings = items.where((i) => i.isFinding).toList()
       ..sort((a, b) => (b.severity?.index ?? 0).compareTo(a.severity?.index ?? 0));
@@ -78,7 +82,7 @@ class ReportService {
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
-        header: (ctx) => _header(settings, 'INFORME DE INSPECCIÓN', inspection.folio),
+        header: (ctx) => _header(settings, 'INFORME DE INSPECCIÓN', inspection.folio, logoImg),
         footer: _footer,
         build: (ctx) => [
           // Datos generales + QR
@@ -183,6 +187,13 @@ class ReportService {
                             child: pw.Text(e.$1.coordsText,
                                 style: const pw.TextStyle(fontSize: 8, color: _accent)),
                           ),
+                          if (e.$1.activity != null || e.$1.heading != null)
+                            pw.Text(
+                                [
+                                  if (e.$1.activity != null) e.$1.activity!,
+                                  if (e.$1.heading != null) 'Hacia ${CompassService.label(e.$1.heading!)}',
+                                ].join(' · '),
+                                style: const pw.TextStyle(fontSize: 7)),
                           pw.Text('Código ${e.$1.verificationCode}',
                               style: const pw.TextStyle(fontSize: 7, color: _muted)),
                         ]),
@@ -266,7 +277,9 @@ class ReportService {
     required List<VisitedPlace> places,
     required VisitRange range,
     required AppSettings settings,
+    Uint8List? logo,
   }) async {
+    final logoImg = logo == null ? null : pw.MemoryImage(logo);
     final totalVisits = places.fold<int>(0, (a, p) => a + p.visits.length);
     final totalPhotos = places.fold<int>(0, (a, p) => a + p.photos.length);
     final totalTime = places.fold<Duration>(Duration.zero, (a, p) => a + p.totalTime);
@@ -279,7 +292,7 @@ class ReportService {
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
         header: (ctx) => _header(settings, 'REPORTE DE LUGARES VISITADOS',
-            'Periodo: ${range.label} · ${_d.format(DateTime.now())}'),
+            'Periodo: ${range.label} · ${_d.format(DateTime.now())}', logoImg),
         footer: _footer,
         build: (ctx) => [
           pw.Row(children: [
@@ -364,14 +377,221 @@ class ReportService {
     return doc.save();
   }
 
+  // ───────────────────────── Versiones Word (.docx) ─────────────────────────
+
+  Future<Uint8List> inspectionDocx({
+    required Inspection inspection,
+    required List<ChecklistItem> items,
+    required List<CaptureRecord> photos,
+    required AppSettings settings,
+    Uint8List? logo,
+  }) async {
+    final t = ChecklistTemplates.byKey(inspection.templateKey);
+    final sum = ComplianceSummary(items);
+    final d = DocxBuilder();
+    _docxHeader(d, settings, 'INFORME DE INSPECCIÓN', inspection.folio, logo);
+
+    d.table([
+      ['Dato', 'Detalle'],
+      ['Tipo', t.name],
+      ['Lugar', inspection.siteName],
+      ['Dirección', inspection.address ?? 'No disponible (capturado sin conexión)'],
+      ['Coordenadas', '${inspection.coordsText} (±${inspection.accuracy.toStringAsFixed(0)} m)'],
+      ['Atendido por', inspection.attendedBy.isEmpty ? '—' : inspection.attendedBy],
+      ['Inspector', inspection.inspectorName.isEmpty ? settings.inspectorName : inspection.inspectorName],
+      ['Inicio', _dt.format(_local(inspection.startedAtUtc))],
+      ['Fin', inspection.endedAtUtc == null ? 'En curso' : _dt.format(_local(inspection.endedAtUtc!))],
+      ['Duración', _dur(inspection.duration)],
+    ], widths: [28, 72]);
+    d.link('Abrir ubicación en Google Maps', inspection.mapsUrl);
+
+    d.heading('Resumen de cumplimiento', size: 24);
+    d.table([
+      ['Cumplimiento', 'Cumple', 'No cumple', 'No aplica', 'Críticos'],
+      [
+        '${(sum.percent * 100).toStringAsFixed(0)} %',
+        '${sum.cumple}',
+        '${sum.noCumple}',
+        '${sum.noAplica}',
+        '${sum.criticos}',
+      ],
+    ]);
+
+    final findings = items.where((i) => i.isFinding).toList()
+      ..sort((a, b) => (b.severity?.index ?? 0).compareTo(a.severity?.index ?? 0));
+    if (findings.isNotEmpty) {
+      d.heading('Hallazgos (${findings.length})', size: 24);
+      d.table([
+        ['Punto', 'Gravedad', 'Descripción / medida correctiva'],
+        for (final f in findings)
+          ['${f.section} · ${f.question}', f.severity?.label ?? 'Sin clasificar', f.note],
+      ], widths: [45, 15, 40], headerFill: 'B91C1C');
+    }
+
+    d.heading('Lista de verificación', size: 24);
+    final sections = <String, List<ChecklistItem>>{};
+    for (final i in items) {
+      sections.putIfAbsent(i.section, () => []).add(i);
+    }
+    for (final e in sections.entries) {
+      d.paragraph(e.key, bold: true, size: 21);
+      d.table([
+        ['Punto', 'Resultado', 'Observación'],
+        for (final i in e.value)
+          [
+            i.question,
+            i.result.label,
+            [if (i.severity != null && i.isFinding) i.severity!.label, if (i.note.isNotEmpty) i.note]
+                .join(' · '),
+          ],
+      ], widths: [55, 15, 30]);
+    }
+
+    if (inspection.generalNotes.trim().isNotEmpty) {
+      d.heading('Observaciones generales', size: 24);
+      d.paragraph(inspection.generalNotes);
+    }
+
+    if (photos.isNotEmpty) {
+      d.heading('Evidencias fotográficas (${photos.length})', size: 24);
+      for (final p in photos) {
+        final f = File(p.filePath);
+        if (!await f.exists()) continue;
+        final (bytes, w, h) = await _downscaleSized(await f.readAsBytes());
+        const maxW = 430.0;
+        d.image(bytes, widthPx: maxW, heightPx: maxW * h / w);
+        d.paragraph(
+          [
+            _dt.format(_local(p.capturedAtUtc)),
+            p.coordsText,
+            if (p.activity != null) p.activity!,
+            if (p.heading != null) 'Hacia ${CompassService.label(p.heading!)}',
+            'Código ${p.verificationCode}',
+          ].join(' · '),
+          size: 16,
+          color: '5B6478',
+        );
+        d.link('Ver punto en Google Maps', p.mapsUrl);
+      }
+    }
+
+    d.heading('Firmas', size: 24);
+    if (inspection.signaturePath != null && await File(inspection.signaturePath!).exists()) {
+      d.image(await File(inspection.signaturePath!).readAsBytes(),
+          widthPx: 200, heightPx: 80, ext: 'png');
+    } else {
+      d.spacer();
+      d.spacer();
+    }
+    d.paragraph('_______________________________');
+    d.paragraph(inspection.inspectorName.isEmpty ? settings.inspectorName : inspection.inspectorName,
+        bold: true);
+    d.paragraph(settings.inspectorRole.isEmpty ? 'Inspector' : settings.inspectorRole, size: 18);
+    d.spacer();
+    d.paragraph('_______________________________');
+    d.paragraph(inspection.attendedBy.isEmpty ? 'Atendido por' : inspection.attendedBy, bold: true);
+    d.paragraph('Atendido por', size: 18);
+    _docxFooter(d);
+    return d.build();
+  }
+
+  Future<Uint8List> visitsDocx({
+    required List<VisitedPlace> places,
+    required VisitRange range,
+    required AppSettings settings,
+    Uint8List? logo,
+  }) async {
+    final d = DocxBuilder();
+    _docxHeader(d, settings, 'REPORTE DE LUGARES VISITADOS',
+        'Periodo: ${range.label} · ${_d.format(DateTime.now())}', logo);
+    final totalVisits = places.fold<int>(0, (a, p) => a + p.visits.length);
+    final totalPhotos = places.fold<int>(0, (a, p) => a + p.photos.length);
+    final totalTime = places.fold<Duration>(Duration.zero, (a, p) => a + p.totalTime);
+    d.table([
+      ['Lugares', 'Visitas', 'Fotos', 'Tiempo en sitio'],
+      ['${places.length}', '$totalVisits', '$totalPhotos', _dur(totalTime)],
+    ]);
+    d.heading('Lugares', size: 24);
+    d.table([
+      ['#', 'Lugar', 'Visitas', 'Fotos', 'Tiempo', 'Última visita'],
+      for (var i = 0; i < places.length; i++)
+        [
+          '${i + 1}',
+          '${places[i].name}${places[i].address == null ? '' : '\n${places[i].address}'}',
+          '${places[i].visits.length}',
+          '${places[i].photos.length}',
+          _dur(places[i].totalTime),
+          _dt.format(_local(places[i].lastVisit)),
+        ],
+    ], widths: [6, 40, 10, 10, 14, 20]);
+    for (var i = 0; i < places.length; i++) {
+      d.link('${places[i].name}: ver en Google Maps',
+          'https://www.google.com/maps/search/?api=1&query=${places[i].latitude},${places[i].longitude}',
+          prefix: '[${i + 1}] ');
+    }
+    final allVisits = [for (final p in places) ...p.visits]
+      ..sort((a, b) => a.startedAtUtc.compareTo(b.startedAtUtc));
+    if (allVisits.isNotEmpty) {
+      d.heading('Detalle cronológico de visitas', size: 24);
+      d.table([
+        ['Folio', 'Fecha', 'Lugar', 'Tipo', 'Duración', 'Estado'],
+        for (final v in allVisits)
+          [
+            v.folio,
+            _dt.format(_local(v.startedAtUtc)),
+            v.siteName,
+            ChecklistTemplates.byKey(v.templateKey).name,
+            _dur(v.duration),
+            v.status.label,
+          ],
+      ], widths: [15, 17, 24, 20, 12, 12]);
+    }
+    _docxFooter(d);
+    return d.build();
+  }
+
+  void _docxHeader(DocxBuilder d, AppSettings s, String title, String right, Uint8List? logo) {
+    if (logo != null) {
+      final im = img.decodePng(logo);
+      if (im != null) {
+        const h = 60.0;
+        d.image(logo, widthPx: h * im.width / im.height, heightPx: h, ext: 'png');
+      }
+    }
+    d.paragraph(s.institution.isEmpty ? 'Institución' : s.institution.toUpperCase(),
+        bold: true, size: 22);
+    if (s.department.isNotEmpty) d.paragraph(s.department, size: 18, color: '5B6478');
+    d.heading(title, size: 32, color: '2563EB');
+    d.paragraph(right, bold: true);
+    d.spacer();
+  }
+
+  void _docxFooter(DocxBuilder d) {
+    d.spacer();
+    d.paragraph('Generado con GeoMark · ${_dt.format(DateTime.now())}',
+        size: 14, color: '5B6478', italic: true);
+  }
+
+  static Future<(Uint8List, int, int)> _downscaleSized(Uint8List jpeg) => Isolate.run(() {
+        final im = img.decodeJpg(jpeg);
+        if (im == null) return (jpeg, 4, 3);
+        final r = im.width > 900 ? img.copyResize(im, width: 900) : im;
+        return (Uint8List.fromList(img.encodeJpg(r, quality: 72)), r.width, r.height);
+      });
+
   // ───────────────────────── Piezas comunes ─────────────────────────
 
-  pw.Widget _header(AppSettings s, String title, String right) => pw.Container(
+  pw.Widget _header(AppSettings s, String title, String right, [pw.MemoryImage? logo]) =>
+      pw.Container(
         margin: const pw.EdgeInsets.only(bottom: 14),
         padding: const pw.EdgeInsets.only(bottom: 8),
         decoration: const pw.BoxDecoration(
             border: pw.Border(bottom: pw.BorderSide(color: _ink, width: 1.5))),
         child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+          if (logo != null) ...[
+            pw.SizedBox(height: 46, width: 90, child: pw.Image(logo, fit: pw.BoxFit.contain)),
+            pw.SizedBox(width: 12),
+          ],
           pw.Expanded(
             child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
               pw.Text(s.institution.isEmpty ? 'Institución' : s.institution.toUpperCase(),

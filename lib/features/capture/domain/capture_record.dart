@@ -18,6 +18,8 @@ class CaptureRecord {
     required this.verificationCode,
     required this.fileSha256,
     this.inspectionId,
+    this.heading,
+    this.activity,
   });
 
   final String id;
@@ -42,6 +44,13 @@ class CaptureRecord {
   /// Inspección a la que pertenece la foto (null = foto suelta).
   final String? inspectionId;
 
+  /// Rumbo de la cámara en grados (0 = Norte, 90 = Este). null si el
+  /// teléfono no tiene brújula.
+  final double? heading;
+
+  /// Actividad que el usuario indicó después de tomar la foto.
+  final String? activity;
+
   bool get addressPending => address == null;
   String get mapsUrl => MapsLink.search(latitude, longitude);
   String get directionsUrl => MapsLink.directions(latitude, longitude);
@@ -62,6 +71,8 @@ class CaptureRecord {
         verificationCode: verificationCode,
         fileSha256: fileSha256,
         inspectionId: inspectionId,
+        heading: heading,
+        activity: activity,
       );
 
   Map<String, Object?> toMap() => {
@@ -79,6 +90,8 @@ class CaptureRecord {
         'verification_code': verificationCode,
         'file_sha256': fileSha256,
         'inspection_id': inspectionId,
+        'heading': heading,
+        'activity': activity,
       };
 
   factory CaptureRecord.fromMap(Map<String, Object?> m) => CaptureRecord(
@@ -95,5 +108,7 @@ class CaptureRecord {
         verificationCode: m['verification_code']! as String,
         fileSha256: m['file_sha256']! as String,
         inspectionId: m['inspection_id'] as String?,
+        heading: (m['heading'] as num?)?.toDouble(),
+        activity: m['activity'] as String?,
       );
 }

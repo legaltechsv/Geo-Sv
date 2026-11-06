@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 ///
 /// v1: captures
 /// v2: + captures.inspection_id, inspections, checklist_items
+/// v3: + captures.heading (rumbo de la cámara), captures.activity
 class AppDatabase {
   AppDatabase._();
   static final instance = AppDatabase._();
@@ -13,7 +14,7 @@ class AppDatabase {
 
   Future<Database> get db async => _db ??= await openDatabase(
         p.join(await getDatabasesPath(), 'geomark.db'),
-        version: 2,
+        version: 3,
         onCreate: (d, _) async {
           await _createCaptures(d);
           await _createInspections(d);
@@ -24,6 +25,10 @@ class AppDatabase {
             await d.execute(
                 'CREATE INDEX idx_captures_inspection ON captures(inspection_id)');
             await _createInspections(d);
+          }
+          if (oldV < 3) {
+            await d.execute('ALTER TABLE captures ADD COLUMN heading REAL');
+            await d.execute('ALTER TABLE captures ADD COLUMN activity TEXT');
           }
         },
       );
@@ -44,7 +49,9 @@ class AppDatabase {
         address_pending INTEGER NOT NULL,
         verification_code TEXT NOT NULL,
         file_sha256 TEXT NOT NULL,
-        inspection_id TEXT
+        inspection_id TEXT,
+        heading REAL,
+        activity TEXT
       )''');
     await d.execute('CREATE INDEX idx_captures_pending ON captures(address_pending)');
     await d.execute('CREATE INDEX idx_captures_inspection ON captures(inspection_id)');

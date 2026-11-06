@@ -1,11 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../app_services.dart';
 import '../../core/ui/glass.dart';
+import '../branding/logo_service.dart';
 import '../capture/presentation/gallery_screen.dart';
 import 'settings_service.dart';
 
-/// Ajustes: datos de la institución e inspector (salen en los PDF).
+/// Ajustes: logotipo, institución, inspector y opciones de la app.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -19,6 +22,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final _dept = TextEditingController(text: s.department);
   late final _name = TextEditingController(text: s.inspectorName);
   late final _role = TextEditingController(text: s.inspectorRole);
+  late bool _compact = s.compactShare;
+  late bool _askActivity = s.askActivity;
+  bool _logoBusy = false;
 
   @override
   void dispose() {
@@ -34,10 +40,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
       department: _dept.text,
       inspectorName: _name.text,
       inspectorRole: _role.text,
+      compactShare: _compact,
+      askActivity: _askActivity,
     ));
     if (!mounted) return;
     FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ajustes guardados')));
+    _toast('Ajustes guardados');
+  }
+
+  /// Guarda solo los interruptores (sin pedir "Guardar").
+  Future<void> _saveToggles() => services.settings.save(
+      services.settings.value.copyWith(compactShare: _compact, askActivity: _askActivity));
+
+  void _toast(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+  Future<void> _logoFrom(Future<void> Function() action, String ok) async {
+    setState(() => _logoBusy = true);
+    try {
+      await action();
+      if (mounted && services.logo.value != null) _toast(ok);
+    } on LogoException catch (e) {
+      if (mounted) _toast(e.message);
+    } catch (e) {
+      if (mounted) _toast('No se pudo cargar el logotipo: $e');
+    } finally {
+      if (mounted) setState(() => _logoBusy = false);
+    }
+  }
+
+  Future<void> _askUrl() async {
+    final ctrl = TextEditingController();
+    final url = await showGlassSheet<String>(
+      context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Logotipo desde Internet',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          const Text(
+            '1. Busca tu logo en Google Imágenes o en tu página/Facebook.\n'
+            '2. Mantén presionada la imagen y elige "Copiar dirección de la imagen".\n'
+            '3. Pégala aquí.',
+            style: TextStyle(color: AppColors.textMuted, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(
+                hintText: 'https://…/logo.png', prefixIcon: Icon(Icons.link)),
+          ),
+          const SizedBox(height: 14),
+          GradientButton(
+            label: 'Descargar logotipo',
+            icon: Icons.download,
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+          ),
+        ]),
+      ),
+    );
+    if (url != null && url.trim().isNotEmpty) {
+      await _logoFrom(() => services.logo.downloadFromUrl(url), 'Logotipo descargado');
+    }
   }
 
   Widget _field(TextEditingController c, String label, IconData icon, String hint) => Padding(
@@ -58,6 +125,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Text('Ajustes',
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
         const SizedBox(height: 16),
+
+        // ── Logotipo ──
+        GlassCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Logotipo', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 4),
+            const Text('Aparece en las fotos, en la pantalla de inicio y en los reportes PDF y Word.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+            const SizedBox(height: 14),
+            ValueListenableBuilder<String?>(
+              valueListenable: services.logo,
+              builder: (_, path, __) => Container(
+                height: 110,
+                width: double.infinity,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: path == null ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: _logoBusy
+                    ? const CircularProgressIndicator()
+                    : path == null
+                        ? const Text('Sin logotipo', style: TextStyle(color: AppColors.textMuted))
+                        : Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Image.file(File(path), fit: BoxFit.contain),
+                          ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Galería'),
+                  onPressed: _logoBusy
+                      ? null
+                      : () => _logoFrom(services.logo.pickFromGallery, 'Logotipo actualizado'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.travel_explore),
+                  label: const Text('Internet'),
+                  onPressed: _logoBusy ? null : _askUrl,
+                ),
+              ),
+            ]),
+            ValueListenableBuilder<String?>(
+              valueListenable: services.logo,
+              builder: (_, path, __) => path == null
+                  ? const SizedBox.shrink()
+                  : TextButton.icon(
+                      icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                      label: const Text('Quitar logotipo', style: TextStyle(color: AppColors.danger)),
+                      onPressed: services.logo.remove,
+                    ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 14),
+
+        // ── Institución e inspector ──
         GlassCard(
           padding: const EdgeInsets.all(18),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -77,6 +210,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _field(_role, 'Cargo', Icons.work_outline, 'Inspectora técnica'),
             const SizedBox(height: 6),
             GradientButton(label: 'Guardar', icon: Icons.check, onPressed: _save),
+          ]),
+        ),
+        const SizedBox(height: 14),
+
+        // ── Opciones ──
+        GlassCard(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(children: [
+            SwitchListTile(
+              title: const Text('Mensaje corto al compartir'),
+              subtitle: const Text('Ubicación, enlace y hora en 3 líneas (ideal para WhatsApp)'),
+              value: _compact,
+              onChanged: (v) {
+                setState(() => _compact = v);
+                _saveToggles();
+              },
+            ),
+            SwitchListTile(
+              title: const Text('Preguntar la actividad'),
+              subtitle: const Text('Después de cada foto: "¿Qué actividad realizas?"'),
+              value: _askActivity,
+              onChanged: (v) {
+                setState(() => _askActivity = v);
+                _saveToggles();
+              },
+            ),
           ]),
         ),
         const SizedBox(height: 14),

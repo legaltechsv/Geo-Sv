@@ -11,12 +11,20 @@ class AppSettings {
     this.department = '',
     this.inspectorName = '',
     this.inspectorRole = '',
+    this.compactShare = true,
+    this.askActivity = true,
   });
 
   final String institution;
   final String department;
   final String inspectorName;
   final String inspectorRole;
+
+  /// Mensaje corto al compartir por WhatsApp (ubicación + hora en 3 líneas).
+  final bool compactShare;
+
+  /// Preguntar "¿Qué actividad realizas?" después de cada foto.
+  final bool askActivity;
 
   bool get isConfigured => institution.isNotEmpty && inspectorName.isNotEmpty;
 
@@ -25,12 +33,16 @@ class AppSettings {
     String? department,
     String? inspectorName,
     String? inspectorRole,
+    bool? compactShare,
+    bool? askActivity,
   }) =>
       AppSettings(
         institution: institution ?? this.institution,
         department: department ?? this.department,
         inspectorName: inspectorName ?? this.inspectorName,
         inspectorRole: inspectorRole ?? this.inspectorRole,
+        compactShare: compactShare ?? this.compactShare,
+        askActivity: askActivity ?? this.askActivity,
       );
 }
 
@@ -44,6 +56,8 @@ class SettingsService extends ValueNotifier<AppSettings> {
       department: p.getString('department') ?? '',
       inspectorName: p.getString('inspectorName') ?? '',
       inspectorRole: p.getString('inspectorRole') ?? '',
+      compactShare: p.getBool('compactShare') ?? true,
+      askActivity: p.getBool('askActivity') ?? true,
     );
   }
 
@@ -53,6 +67,8 @@ class SettingsService extends ValueNotifier<AppSettings> {
     await p.setString('department', s.department.trim());
     await p.setString('inspectorName', s.inspectorName.trim());
     await p.setString('inspectorRole', s.inspectorRole.trim());
+    await p.setBool('compactShare', s.compactShare);
+    await p.setBool('askActivity', s.askActivity);
     value = s;
   }
 }

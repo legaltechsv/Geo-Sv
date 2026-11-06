@@ -12,6 +12,7 @@ import '../../capture/domain/capture_record.dart';
 import '../../capture/presentation/camera_screen.dart';
 import '../../capture/presentation/preview_screen.dart';
 import '../../reports/pdf_preview_screen.dart';
+import '../../share/share_service.dart';
 import '../domain/checklist_templates.dart';
 import '../domain/inspection.dart';
 import 'signature_sheet.dart';
@@ -130,20 +131,32 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
   Future<void> _openReport() async {
     setState(() => _generating = true);
     try {
+      final logo = await services.logo.bytes();
+      final insp = _insp!;
       final bytes = await services.reports.inspectionReport(
-        inspection: _insp!,
+        inspection: insp,
         items: _items,
         photos: _photos,
         settings: services.settings.value,
+        logo: logo,
       );
       if (!mounted) return;
       await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
-            title: 'Informe ${_insp!.folio}',
-            fileName: 'Informe_${_insp!.folio}.pdf',
+            title: 'Informe ${insp.folio}',
+            fileName: 'Informe_${insp.folio}.pdf',
             bytes: bytes,
+            shareText: 'Informe ${insp.folio} · ${insp.siteName}\n'
+                '📍 ${ShareService.shortMapsUrl(insp.latitude, insp.longitude)}',
+            buildDocx: () => services.reports.inspectionDocx(
+              inspection: insp,
+              items: _items,
+              photos: _photos,
+              settings: services.settings.value,
+              logo: logo,
+            ),
           ),
         ),
       );
