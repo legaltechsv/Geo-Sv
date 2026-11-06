@@ -213,6 +213,7 @@ class CaptureController extends ChangeNotifier {
     String? segmentId,
     Future<String?> Function()? askPointRole,
     bool support = false,
+    String? itemId,
   }) async {
     final cam = camera;
     if (cam == null || !cam.value.isInitialized) {
@@ -317,6 +318,7 @@ class CaptureController extends ChangeNotifier {
         segmentId: segmentId,
         pointRole: segmentId == null ? null : (pointRole ?? 'intermedio'),
         support: support,
+        itemId: itemId,
       );
       await repository.insert(record);
       lastRecord.value = record;

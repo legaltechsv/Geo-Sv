@@ -23,6 +23,7 @@ class CaptureRecord {
     this.segmentId,
     this.pointRole,
     this.support = false,
+    this.itemId,
   });
 
   final String id;
@@ -63,6 +64,9 @@ class CaptureRecord {
   /// ubicación). La foto PRINCIPAL es la que sirve para ubicar el lugar.
   final bool support;
 
+  /// Punto del checklist al que pertenece (foto de un hallazgo).
+  final String? itemId;
+
   bool get addressPending => address == null;
   String get mapsUrl => MapsLink.search(latitude, longitude);
   String get directionsUrl => MapsLink.directions(latitude, longitude);
@@ -88,6 +92,7 @@ class CaptureRecord {
         segmentId: segmentId,
         pointRole: pointRole,
         support: support,
+        itemId: itemId,
       );
 
   Map<String, Object?> toMap() => {
@@ -110,6 +115,7 @@ class CaptureRecord {
         'segment_id': segmentId,
         'point_role': pointRole,
         'support': support ? 1 : 0,
+        'item_id': itemId,
       };
 
   factory CaptureRecord.fromMap(Map<String, Object?> m) => CaptureRecord(
@@ -131,5 +137,6 @@ class CaptureRecord {
         segmentId: m['segment_id'] as String?,
         pointRole: m['point_role'] as String?,
         support: (m['support'] as int? ?? 0) == 1,
+        itemId: m['item_id'] as String?,
       );
 }

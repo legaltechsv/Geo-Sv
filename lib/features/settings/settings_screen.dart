@@ -1,9 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../app_services.dart';
 import '../../core/ui/glass.dart';
+import '../backup/backup_service.dart';
 import '../branding/logo_service.dart';
 import '../capture/presentation/gallery_screen.dart';
 import '../capture/presentation/widgets/look_sheet.dart';
@@ -287,6 +290,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 10),
+        _BackupCard(),
+        const SizedBox(height: 10),
         const GlassCard(
           child: Row(children: [
             Icon(Icons.shield_outlined, color: AppColors.teal),
@@ -302,4 +307,123 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
     );
   }
+}
+
+
+/// Respaldo y restauración de todos los datos de la app.
+class _BackupCard extends StatefulWidget {
+  @override
+  State<_BackupCard> createState() => _BackupCardState();
+}
+
+class _BackupCardState extends State<_BackupCard> {
+  final _svc = BackupService();
+  bool _busy = false;
+  String? _status;
+
+  Future<void> _backup(BuildContext btn) async {
+    final box = btn.findRenderObject() as RenderBox?;
+    final origin = box == null ? null : box.localToGlobal(Offset.zero) & box.size;
+    setState(() {
+      _busy = true;
+      _status = 'Creando respaldo…';
+    });
+    try {
+      final zip = await _svc.create();
+      final mb = (await zip.length()) / (1024 * 1024);
+      setState(() => _status = 'Respaldo listo (${mb.toStringAsFixed(1)} MB). Guárdalo en Drive o envíalo por WhatsApp.');
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(zip.path, mimeType: 'application/zip')],
+        text: 'Respaldo de GEO CUSCA SUR',
+        sharePositionOrigin: origin,
+      ));
+    } catch (e) {
+      setState(() => _status = 'No se pudo crear el respaldo: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _restore() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('¿Restaurar un respaldo?'),
+        content: const Text(
+            'Se reemplazarán las inspecciones, tramos, fotos y ajustes de este teléfono por los del respaldo. '
+            'Al terminar, la app se cerrará para cargar los datos.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Elegir respaldo')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() {
+      _busy = true;
+      _status = 'Restaurando…';
+    });
+    try {
+      final done = await _svc.pickAndRestore();
+      if (!done) {
+        setState(() => _status = null);
+        return;
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          title: const Text('Respaldo restaurado'),
+          content: const Text('La app se cerrará. Ábrela de nuevo para ver tus datos.'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Entendido'))],
+        ),
+      );
+      await SystemNavigator.pop();
+    } catch (e) {
+      setState(() => _status = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => GlassCard(
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            Icon(Icons.backup_outlined, color: AppColors.cyan),
+            SizedBox(width: 10),
+            Text('Respaldo de datos', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          ]),
+          const SizedBox(height: 6),
+          const Text(
+            'Guarda todo (inspecciones, tramos, fotos, firmas, logo y ajustes) en un archivo. '
+            'Hazlo antes de desinstalar o cambiar de teléfono.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          Builder(
+            builder: (b) => GradientButton(
+              label: 'Crear respaldo',
+              icon: Icons.cloud_upload_outlined,
+              busy: _busy,
+              onPressed: () => _backup(b),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.settings_backup_restore),
+              label: const Text('Restaurar respaldo'),
+              onPressed: _busy ? null : _restore,
+            ),
+          ),
+          if (_status != null) ...[
+            const SizedBox(height: 10),
+            Text(_status!, style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+          ],
+        ]),
+      );
 }

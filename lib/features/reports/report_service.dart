@@ -149,6 +149,18 @@ class ReportService {
                         style: const pw.TextStyle(fontSize: 9, color: _muted)),
                     if (f.note.isNotEmpty)
                       pw.Text(f.note, style: const pw.TextStyle(fontSize: 9)),
+                    // Fotos de este hallazgo
+                    if (thumbs.any((t) => t.$1.itemId == f.id)) ...[
+                      pw.SizedBox(height: 5),
+                      pw.Wrap(spacing: 6, runSpacing: 6, children: [
+                        for (final t in thumbs.where((t) => t.$1.itemId == f.id))
+                          pw.ClipRRect(
+                            horizontalRadius: 3,
+                            verticalRadius: 3,
+                            child: pw.Image(t.$2, height: 78, width: 104, fit: pw.BoxFit.cover),
+                          ),
+                      ]),
+                    ],
                   ]),
                 )),
             pw.SizedBox(height: 10),
@@ -427,6 +439,19 @@ class ReportService {
         for (final f in findings)
           ['${f.section} · ${f.question}', f.severity?.label ?? 'Sin clasificar', f.note],
       ], widths: [45, 15, 40], headerFill: 'B91C1C');
+      // Fotos de cada hallazgo
+      for (final f in findings) {
+        final own = photos.where((p) => p.itemId == f.id).toList();
+        if (own.isEmpty) continue;
+        d.paragraph('Evidencia: ${f.question}', bold: true, size: 18);
+        for (final p in own) {
+          final file = File(p.filePath);
+          if (!await file.exists()) continue;
+          final (bytes, w, h) = await _downscaleSized(await file.readAsBytes());
+          d.image(bytes, widthPx: 260, heightPx: 260 * h / w,
+              caption: '${_dt.format(_local(p.capturedAtUtc))} · ${p.coordsText}');
+        }
+      }
     }
 
     d.heading('Lista de verificación', size: 24);

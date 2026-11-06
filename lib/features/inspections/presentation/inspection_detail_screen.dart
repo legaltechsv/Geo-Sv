@@ -83,6 +83,24 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
     await services.inspections.updateItem(item);
   }
 
+  /// Foto de un hallazgo: abre la cámara, toma UNA foto y vuelve.
+  Future<void> _addItemPhoto(ChecklistItem item) async {
+    await Navigator.push<CaptureRecord>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CameraScreen(
+          controller: services.camera,
+          templates: services.templates,
+          inspectionId: widget.inspectionId,
+          itemId: item.id,
+          returnOnCapture: true,
+        ),
+      ),
+    );
+    _photos = await services.captures.byInspection(widget.inspectionId);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _addPhoto() async {
     await Navigator.push(
       context,
@@ -311,6 +329,10 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
                     item.note = n;
                     services.inspections.updateItem(item);
                   },
+                  photos: _photos.where((p) => p.itemId == item.id).toList(),
+                  onAddPhoto: () => _addItemPhoto(item),
+                  onOpenPhoto: (p) => Navigator.push(
+                      context, MaterialPageRoute(builder: (_) => PreviewScreen(record: p))),
                 ),
               const SizedBox(height: 10),
             ],
@@ -392,6 +414,9 @@ class _ChecklistCard extends StatelessWidget {
     required this.onResult,
     required this.onSeverity,
     required this.onNote,
+    this.photos = const [],
+    this.onAddPhoto,
+    this.onOpenPhoto,
   });
 
   final ChecklistItem item;
@@ -399,6 +424,11 @@ class _ChecklistCard extends StatelessWidget {
   final ValueChanged<ItemResult> onResult;
   final ValueChanged<Severity> onSeverity;
   final ValueChanged<String> onNote;
+
+  /// Fotos de este hallazgo.
+  final List<CaptureRecord> photos;
+  final VoidCallback? onAddPhoto;
+  final ValueChanged<CaptureRecord>? onOpenPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -458,6 +488,47 @@ class _ChecklistCard extends StatelessWidget {
                 isDense: true,
               ),
               onChanged: onNote,
+            ),
+            const SizedBox(height: 10),
+            // Evidencia del hallazgo
+            SizedBox(
+              height: 64,
+              child: ListView(scrollDirection: Axis.horizontal, children: [
+                if (!locked)
+                  GestureDetector(
+                    onTap: onAddPhoto,
+                    child: Container(
+                      width: 64,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: ItemResult.noCumple.color.withValues(alpha: 0.6)),
+                        color: ItemResult.noCumple.color.withValues(alpha: 0.1),
+                      ),
+                      child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.add_a_photo_outlined, size: 20),
+                        SizedBox(height: 2),
+                        Text('Foto', style: TextStyle(fontSize: 11)),
+                      ]),
+                    ),
+                  ),
+                for (final p in photos)
+                  GestureDetector(
+                    onTap: () => onOpenPhoto?.call(p),
+                    child: Container(
+                      width: 64,
+                      margin: const EdgeInsets.only(right: 8),
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+                      child: Image.file(File(p.filePath), fit: BoxFit.cover, cacheWidth: 180),
+                    ),
+                  ),
+                if (locked && photos.isEmpty)
+                  const Center(
+                    child: Text('Sin fotos del hallazgo',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  ),
+              ]),
             ),
           ],
         ]),

@@ -8,15 +8,26 @@ import 'package:sqflite/sqflite.dart';
 /// v3: + captures.heading (rumbo de la cámara), captures.activity
 /// v4: + captures.segment_id, captures.point_role, segments (tramos)
 /// v5: + captures.support (foto de apoyo: solo coordenadas, sin QR)
+/// v6: + captures.item_id (foto de un punto/hallazgo del checklist)
 class AppDatabase {
   AppDatabase._();
   static final instance = AppDatabase._();
 
   Database? _db;
 
+  /// Ruta del archivo de la base de datos (para respaldos).
+  static Future<String> filePath() async => p.join(await getDatabasesPath(), 'geomark.db');
+
+  /// Cierra la conexión (antes de copiar o reemplazar el archivo).
+  Future<void> close() async {
+    final d = _db;
+    _db = null;
+    await d?.close();
+  }
+
   Future<Database> get db async => _db ??= await openDatabase(
         p.join(await getDatabasesPath(), 'geomark.db'),
-        version: 5,
+        version: 6,
         onCreate: (d, _) async {
           await _createCaptures(d);
           await _createInspections(d);
@@ -40,6 +51,9 @@ class AppDatabase {
           }
           if (oldV < 5) {
             await d.execute('ALTER TABLE captures ADD COLUMN support INTEGER NOT NULL DEFAULT 0');
+          }
+          if (oldV < 6) {
+            await d.execute('ALTER TABLE captures ADD COLUMN item_id TEXT');
           }
         },
       );
@@ -65,7 +79,8 @@ class AppDatabase {
         activity TEXT,
         segment_id TEXT,
         point_role TEXT,
-        support INTEGER NOT NULL DEFAULT 0
+        support INTEGER NOT NULL DEFAULT 0,
+        item_id TEXT
       )''');
     await d.execute('CREATE INDEX idx_captures_pending ON captures(address_pending)');
     await d.execute('CREATE INDEX idx_captures_inspection ON captures(inspection_id)');

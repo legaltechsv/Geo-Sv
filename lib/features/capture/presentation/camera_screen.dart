@@ -50,6 +50,7 @@ class CameraScreen extends StatefulWidget {
     this.inspectionId,
     this.segmentId,
     this.returnOnCapture = false,
+    this.itemId,
   });
   final CaptureController controller;
   final TemplateController templates;
@@ -63,6 +64,9 @@ class CameraScreen extends StatefulWidget {
 
   /// Cierra el visor y devuelve la foto (lo usan los Canales).
   final bool returnOnCapture;
+
+  /// Foto de un hallazgo concreto del checklist (va con [inspectionId]).
+  final String? itemId;
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -205,6 +209,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             : null,
         segmentId: widget.segmentId,
         askPointRole: widget.segmentId == null ? null : () => askPointRole(context),
+        itemId: widget.itemId,
         support: widget.inspectionId != null ||
             widget.segmentId != null ||
             (_freeMode && _supportMode == true && _sessionPhotos > 0),
@@ -387,7 +392,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 top: pad.top + 6,
                 left: 8,
                 right: 8,
-                child: Row(children: [
+                child: _GlassBar(child: Row(children: [
                   _RoundIcon(icon: Icons.arrow_back, onTap: () => Navigator.maybePop(context)),
                   _RoundIcon(
                     icon: switch (c.flashMode) {
@@ -424,7 +429,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                     icon: Icons.tune,
                     onTap: () => showLookSheet(context, templates: widget.templates),
                   ),
-                ]),
+                ])),
               ),
 
               // 3b. Brújula (centro) + logotipo y mini mapa en la esquina elegida
@@ -492,14 +497,23 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               Positioned(
                 left: 0,
                 right: 0,
-                bottom: pad.bottom + 18,
-                child: Column(children: [
-                  const Text('FOTO',
-                      style: TextStyle(
+                bottom: pad.bottom + 12,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: _GlassBar(
+                  radius: 34,
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 14),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(
+                      !_freeMode
+                          ? 'REPORTE'
+                          : (_supportMode == true ? 'FOTO DE APOYO' : 'FOTO PRINCIPAL'),
+                      style: const TextStyle(
                           color: Color(0xFFFFC107),
                           fontWeight: FontWeight.w700,
+                          fontSize: 12,
                           letterSpacing: 1.5)),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -517,6 +531,8 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                     ],
                   ),
                 ]),
+                ),
+                ),
               ),
 
               // 8. Destello del obturador
@@ -689,39 +705,110 @@ class _LabeledButton extends StatelessWidget {
       );
 }
 
-class _ShutterButton extends StatelessWidget {
+/// Obturador con relieve: aro de vidrio, botón con degradado y brillo,
+/// se hunde al presionarlo; mientras procesa muestra un anillo de progreso.
+class _ShutterButton extends StatefulWidget {
   const _ShutterButton({required this.busy, required this.onPressed});
   final bool busy;
   final VoidCallback onPressed;
 
   @override
+  State<_ShutterButton> createState() => _ShutterButtonState();
+}
+
+class _ShutterButtonState extends State<_ShutterButton> {
+  bool _down = false;
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: busy ? null : onPressed,
-      child: Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 5),
-        ),
-        padding: const EdgeInsets.all(5),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+      onTapDown: widget.busy ? null : (_) => setState(() => _down = true),
+      onTapCancel: () => setState(() => _down = false),
+      onTapUp: widget.busy
+          ? null
+          : (_) {
+              setState(() => _down = false);
+              widget.onPressed();
+            },
+      child: AnimatedScale(
+        scale: _down ? 0.88 : 1,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
+          width: 82,
+          height: 82,
+          padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: busy ? Colors.white38 : Colors.white,
             shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 4),
+            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 14, offset: Offset(0, 6))],
           ),
-          child: busy
-              ? const Padding(
-                  padding: EdgeInsets.all(18),
-                  child: CircularProgressIndicator(strokeWidth: 3, color: Colors.black54),
-                )
-              : null,
+          child: Stack(alignment: Alignment.center, children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: widget.busy
+                      ? [Colors.white38, Colors.white24]
+                      : [Colors.white, const Color(0xFFD9E6FF)],
+                ),
+              ),
+            ),
+            // Brillo superior (relieve)
+            Positioned(
+              top: 6,
+              child: Container(
+                width: 34,
+                height: 12,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.white, Colors.white.withValues(alpha: 0)],
+                  ),
+                ),
+              ),
+            ),
+            if (widget.busy)
+              const SizedBox(
+                width: 64,
+                height: 64,
+                child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.cyan),
+              ),
+          ]),
         ),
       ),
     );
   }
+}
+
+/// Barra/panel de vidrio flotante para los controles de la cámara.
+class _GlassBar extends StatelessWidget {
+  const _GlassBar({required this.child, this.radius = 24, this.padding = const EdgeInsets.symmetric(horizontal: 4)});
+  final Widget child;
+  final double radius;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.28),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+            ),
+            child: child,
+          ),
+        ),
+      );
 }
 
 class _PermissionError extends StatelessWidget {
