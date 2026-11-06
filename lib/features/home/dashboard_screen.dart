@@ -304,8 +304,14 @@ class _Kpi extends StatelessWidget {
                 child: Icon(icon, size: 18, color: color),
               ),
               const SizedBox(height: 10),
-              Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-              Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              ),
             ]),
           ),
         ),
@@ -329,9 +335,12 @@ class _QuickAction extends StatelessWidget {
               child: Icon(icon, size: 28, color: Colors.white),
             ),
             const SizedBox(height: 8),
-            Text(label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.2)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.2)),
+            ),
           ]),
         ),
       );

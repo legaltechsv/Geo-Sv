@@ -102,6 +102,15 @@ class PreviewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
+            if (r.support)
+              Builder(
+                builder: (b) => GradientButton(
+                  label: 'Compartir foto',
+                  icon: Icons.ios_share,
+                  onPressed: () => share.shareImageOnly(r, origin: _originOf(b)),
+                ),
+              )
+            else ...[
             // Compartir
             Builder(
               builder: (b) => _WhatsAppButton(
@@ -151,6 +160,7 @@ class PreviewScreen extends StatelessWidget {
                     style: const TextStyle(fontSize: 13, height: 1.4)),
               ]),
             ),
+            ],
           ],
         ),
       ),
@@ -191,11 +201,16 @@ class _WhatsAppButton extends StatelessWidget {
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               Icon(Icons.chat, color: outlined ? green : Colors.white),
               const SizedBox(width: 10),
-              Text(label,
-                  style: TextStyle(
-                      color: outlined ? green : Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15)),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(label,
+                      style: TextStyle(
+                          color: outlined ? green : Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15)),
+                ),
+              ),
             ]),
           ),
         ),

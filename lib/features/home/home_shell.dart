@@ -112,11 +112,15 @@ class _GlassNavBar extends StatelessWidget {
                   color: sel ? AppColors.cyan : AppColors.textMuted, size: 23),
             ),
             const SizedBox(height: 2),
-            Text(label,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label,
+                maxLines: 1,
                 style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
                     color: sel ? AppColors.text : AppColors.textMuted)),
+            ),
           ]),
         ),
       );

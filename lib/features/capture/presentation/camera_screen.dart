@@ -23,6 +23,7 @@ import '../../segments/point_role_sheet.dart';
 import 'widgets/activity_sheet.dart';
 import 'widgets/compass_widget.dart';
 import 'widgets/live_mini_map.dart';
+import 'widgets/look_sheet.dart';
 import 'widgets/live_watermark_overlay.dart';
 import 'widgets/template_picker_sheet.dart';
 
@@ -204,7 +205,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             : null,
         segmentId: widget.segmentId,
         askPointRole: widget.segmentId == null ? null : () => askPointRole(context),
-        support: _freeMode && _supportMode == true && _sessionPhotos > 0,
+        support: widget.inspectionId != null ||
+            widget.segmentId != null ||
+            (_freeMode && _supportMode == true && _sessionPhotos > 0),
       );
       if (!mounted) return;
       _sessionPhotos++;
@@ -213,7 +216,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         if (!mounted) return;
         setState(() => _supportMode = mode);
       }
-      if (record.support) {
+      if (record.support && _freeMode) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Foto de apoyo $_sessionPhotos guardada (con coordenadas)'),
           duration: const Duration(seconds: 1),
@@ -271,13 +274,16 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 : _corner(
                     cfg.logoPosition,
                     pad,
-                    Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(8),
+                    Opacity(
+                      opacity: cfg.logoOpacity,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Image.file(File(path), height: 38 * cfg.logoScale, fit: BoxFit.contain),
                       ),
-                      child: Image.file(File(path), height: 38, fit: BoxFit.contain),
                     ),
                   ),
           ),
@@ -286,15 +292,19 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             _corner(
               cfg.mapPosition,
               pad,
-              RepaintBoundary(
+              Opacity(
+                opacity: cfg.mapOpacity,
+                child: RepaintBoundary(
                 key: _mapKey,
                 child: ValueListenableBuilder<Position?>(
                   valueListenable: c.livePosition,
                   builder: (_, pos, __) => ValueListenableBuilder<double?>(
                     valueListenable: services.compass.heading,
-                    builder: (_, h, __) => LiveMiniMap(position: pos, heading: h),
+                    builder: (_, h, __) =>
+                        LiveMiniMap(position: pos, heading: h, size: 140 * cfg.mapScale),
                   ),
                 ),
+              ),
               ),
             ),
         ]),
@@ -392,20 +402,27 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                     badge: _timerSeconds == 0 ? null : '${_timerSeconds}s',
                     onTap: _cycleTimer,
                   ),
-                  const Spacer(),
-                  _GpsChip(position: c.livePosition),
-                  if (_freeMode && _supportMode != null) ...[
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () => setState(() => _supportMode = !_supportMode!),
-                      child: _Pill(text: _supportMode! ? 'APOYO' : 'PRINCIPAL'),
+                  // Centro: se reduce solo en pantallas angostas para que todo quepa.
+                  Expanded(
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          _GpsChip(position: c.livePosition),
+                          if (_freeMode && _supportMode != null) ...[
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () => setState(() => _supportMode = !_supportMode!),
+                              child: _Pill(text: _supportMode! ? 'APOYO' : 'PRINCIPAL'),
+                            ),
+                          ],
+                        ]),
+                      ),
                     ),
-                  ],
-                  const Spacer(),
+                  ),
                   _RoundIcon(
                     icon: Icons.tune,
-                    onTap: () => showTemplatePicker(context,
-                        templates: widget.templates, clock: c.nowForPreview),
+                    onTap: () => showLookSheet(context, templates: widget.templates),
                   ),
                 ]),
               ),
@@ -415,7 +432,15 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 top: pad.top + 62,
                 left: 0,
                 right: 0,
-                child: Center(child: CompassWidget(heading: services.compass.heading)),
+                child: Center(
+                  child: ValueListenableBuilder<WatermarkConfig>(
+                    valueListenable: widget.templates,
+                    builder: (_, cfg, __) => Opacity(
+                      opacity: cfg.compassOpacity,
+                      child: CompassWidget(heading: services.compass.heading, size: 64 * cfg.compassScale),
+                    ),
+                  ),
+                ),
               ),
               ..._cornerOverlays(pad),
 

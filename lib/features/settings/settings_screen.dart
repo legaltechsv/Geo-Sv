@@ -6,6 +6,7 @@ import '../../app_services.dart';
 import '../../core/ui/glass.dart';
 import '../branding/logo_service.dart';
 import '../capture/presentation/gallery_screen.dart';
+import '../capture/presentation/widgets/look_sheet.dart';
 import 'settings_service.dart';
 
 /// Ajustes como pantalla independiente (se abre desde el Panel).
@@ -265,6 +266,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SizedBox(height: 14),
+        GlassCard(
+          margin: const EdgeInsets.only(bottom: 10),
+          onTap: () => showLookSheet(context, templates: services.templates),
+          child: const Row(children: [
+            Icon(Icons.tune, color: AppColors.violet),
+            SizedBox(width: 12),
+            Expanded(child: Text('Tamaño y transparencia de la toma')),
+            Icon(Icons.chevron_right),
+          ]),
+        ),
         GlassCard(
           onTap: () => Navigator.push(context,
               MaterialPageRoute(builder: (_) => GalleryScreen(repository: services.captures))),

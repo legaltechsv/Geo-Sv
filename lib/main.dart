@@ -29,6 +29,15 @@ class ProCamApp extends StatelessWidget {
       title: 'GEO CUSCA SUR',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      // Si el usuario tiene la letra del sistema muy grande, se limita para
+      // que botones y tarjetas no se desborden en ninguna pantalla.
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(textScaler: mq.textScaler.clamp(minScaleFactor: 0.85, maxScaleFactor: 1.15)),
+          child: child!,
+        );
+      },
       home: const HomeShell(),
     );
   }

@@ -90,7 +90,9 @@ class WatermarkService {
 
     // 2. Unidad relativa (1 % del lado corto) => la marca se ve igual en
     //    una foto de 2 MP o de 50 MP, vertical u horizontal.
-    final u = math.min(w, h) / 100;
+    // u0 = 1 % del lado corto; u = unidad del panel según su tamaño elegido.
+    final u0 = math.min(w, h) / 100;
+    final u = u0 * data.config.panelScale;
     final pad = 3 * u;
     final qrBox = data.support ? 0.0 : 24 * u; // QR + margen blanco ("quiet zone")
     final qrQuiet = 1.6 * u;
@@ -158,7 +160,10 @@ class WatermarkService {
         ..shader = ui.Gradient.linear(
           Offset(0, panelTop),
           Offset(0, h),
-          [const Color(0xA6000000), const Color(0xE0000000)],
+          [
+            Color.fromRGBO(0, 0, 0, (cfg.panelOpacity * 0.85).clamp(0.0, 1.0)),
+            Color.fromRGBO(0, 0, 0, cfg.panelOpacity.clamp(0.0, 1.0)),
+          ],
         ),
     );
     if (header != null) {
@@ -229,18 +234,21 @@ class WatermarkService {
         final lc = await ui.instantiateImageCodec(data.logo!);
         final logo = (await lc.getNextFrame()).image;
         lc.dispose();
-        final maxW = 22 * u, maxH = 11 * u;
+        final lu = u0 * cfg.logoScale;
+        final maxW = 22 * lu, maxH = 11 * lu;
         final s = math.min(maxW / logo.width, maxH / logo.height);
         final lw = logo.width * s, lh = logo.height * s;
-        final lpad = 1.4 * u;
+        final lpad = 1.4 * lu;
         final box = place(cfg.logoPosition, lw + lpad * 2, lh + lpad * 2);
         canvas.drawRRect(RRect.fromRectAndRadius(box, Radius.circular(1.6 * u)),
-            Paint()..color = const Color(0xE6FFFFFF));
+            Paint()..color = Color.fromRGBO(255, 255, 255, 0.9 * cfg.logoOpacity));
         canvas.drawImageRect(
           logo,
           Rect.fromLTWH(0, 0, logo.width.toDouble(), logo.height.toDouble()),
           Rect.fromLTWH(box.left + lpad, box.top + lpad, lw, lh),
-          Paint()..filterQuality = ui.FilterQuality.high,
+          Paint()
+            ..filterQuality = ui.FilterQuality.high
+            ..color = Color.fromRGBO(0, 0, 0, cfg.logoOpacity),
         );
         logo.dispose();
       } catch (_) {
@@ -253,7 +261,7 @@ class WatermarkService {
         final mc = await ui.instantiateImageCodec(data.mapImage!);
         final map = (await mc.getNextFrame()).image;
         mc.dispose();
-        final side = 30 * u;
+        final side = 30 * u0 * cfg.mapScale;
         final box = place(cfg.mapPosition, side, side * map.height / map.width);
         final rr = RRect.fromRectAndRadius(box, Radius.circular(2 * u));
         canvas.save();
@@ -262,15 +270,17 @@ class WatermarkService {
           map,
           Rect.fromLTWH(0, 0, map.width.toDouble(), map.height.toDouble()),
           box,
-          Paint()..filterQuality = ui.FilterQuality.high,
+          Paint()
+            ..filterQuality = ui.FilterQuality.high
+            ..color = Color.fromRGBO(0, 0, 0, cfg.mapOpacity),
         );
         canvas.restore();
         canvas.drawRRect(
             rr,
             Paint()
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 0.5 * u
-              ..color = const Color(0xFFFFFFFF));
+              ..strokeWidth = 0.5 * u0 * cfg.mapScale
+              ..color = Color.fromRGBO(255, 255, 255, cfg.mapOpacity));
         map.dispose();
       } catch (_) {}
     }

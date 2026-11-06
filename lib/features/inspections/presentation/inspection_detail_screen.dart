@@ -489,11 +489,14 @@ class _ResultButton extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 9),
               child: Center(
-                child: Text(result.label,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(result.label,
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                         color: selected ? result.color : AppColors.text)),
+                ),
               ),
             ),
           ),

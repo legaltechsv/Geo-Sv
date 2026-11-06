@@ -69,6 +69,14 @@ class ShareService {
     ));
   }
 
+  /// Solo la imagen (fotos de apoyo del reporte): sin texto ni enlace.
+  Future<void> shareImageOnly(CaptureRecord r, {Rect? origin}) async {
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(r.filePath, mimeType: 'image/jpeg', name: 'Evidencia_${r.time.fileStamp}.jpg')],
+      sharePositionOrigin: origin,
+    ));
+  }
+
   /// Abre WhatsApp DIRECTAMENTE con el mensaje de ubicación listo para enviar
   /// (el usuario solo elige el chat). Ideal para "ubicar a otro".
   Future<bool> whatsappLocation(CaptureRecord r, {required bool compact}) =>

@@ -178,7 +178,10 @@ class _Action extends StatelessWidget {
                     : Icon(icon, color: Colors.white),
               ),
               const SizedBox(height: 4),
-              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
             ]),
           ),
         ),

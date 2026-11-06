@@ -65,7 +65,7 @@ class _LiveWatermarkOverlayState extends State<LiveWatermarkOverlay> {
     final minimal = style == WatermarkStyle.minimo;
     final t = widget.clock();
     final p = widget.position;
-    final scale = widget.compact ? 0.45 : 1.0;
+    final scale = widget.compact ? 0.45 : cfg.panelScale;
     final showHeader = cfg.hasProject || style == WatermarkStyle.obra;
 
     final small = TextStyle(
@@ -89,7 +89,7 @@ class _LiveWatermarkOverlayState extends State<LiveWatermarkOverlay> {
     final card = ClipRRect(
       borderRadius: BorderRadius.circular(10 * scale),
       child: Container(
-        color: Colors.black.withValues(alpha: 0.55),
+        color: Colors.black.withValues(alpha: widget.compact ? 0.55 : cfg.panelOpacity),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

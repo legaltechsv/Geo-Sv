@@ -73,6 +73,14 @@ class WatermarkConfig {
     this.logoPosition = OverlayPosition.supDer,
     this.showMap = false,
     this.mapPosition = OverlayPosition.supIzq,
+    this.panelScale = 1.0,
+    this.panelOpacity = 0.65,
+    this.mapScale = 1.0,
+    this.mapOpacity = 1.0,
+    this.logoScale = 1.0,
+    this.logoOpacity = 1.0,
+    this.compassScale = 1.0,
+    this.compassOpacity = 1.0,
   });
 
   final WatermarkStyle style;
@@ -88,6 +96,15 @@ class WatermarkConfig {
   final bool showMap;
   final OverlayPosition mapPosition;
 
+  // ── Tamaño (0.5–1.8) y opacidad (0.1–1.0) de cada elemento ──
+  /// Panel de datos (hora, coordenadas, dirección…): tamaño y fondo.
+  final double panelScale, panelOpacity;
+  final double mapScale, mapOpacity;
+  final double logoScale, logoOpacity;
+
+  /// Brújula del visor (solo pantalla; el rumbo va escrito en la foto).
+  final double compassScale, compassOpacity;
+
   bool get hasProject => projectName.trim().isNotEmpty;
   bool get hasNote => note.trim().isNotEmpty;
 
@@ -100,6 +117,14 @@ class WatermarkConfig {
     OverlayPosition? logoPosition,
     bool? showMap,
     OverlayPosition? mapPosition,
+    double? panelScale,
+    double? panelOpacity,
+    double? mapScale,
+    double? mapOpacity,
+    double? logoScale,
+    double? logoOpacity,
+    double? compassScale,
+    double? compassOpacity,
   }) =>
       WatermarkConfig(
         style: style ?? this.style,
@@ -110,6 +135,26 @@ class WatermarkConfig {
         logoPosition: logoPosition ?? this.logoPosition,
         showMap: showMap ?? this.showMap,
         mapPosition: mapPosition ?? this.mapPosition,
+        panelScale: panelScale ?? this.panelScale,
+        panelOpacity: panelOpacity ?? this.panelOpacity,
+        mapScale: mapScale ?? this.mapScale,
+        mapOpacity: mapOpacity ?? this.mapOpacity,
+        logoScale: logoScale ?? this.logoScale,
+        logoOpacity: logoOpacity ?? this.logoOpacity,
+        compassScale: compassScale ?? this.compassScale,
+        compassOpacity: compassOpacity ?? this.compassOpacity,
+      );
+
+  /// Vuelve tamaños y opacidades a los valores de fábrica.
+  WatermarkConfig resetLook() => copyWith(
+        panelScale: 1.0,
+        panelOpacity: 0.65,
+        mapScale: 1.0,
+        mapOpacity: 1.0,
+        logoScale: 1.0,
+        logoOpacity: 1.0,
+        compassScale: 1.0,
+        compassOpacity: 1.0,
       );
 
   Map<String, Object?> toJson() => {
@@ -121,9 +166,18 @@ class WatermarkConfig {
         'logoPosition': logoPosition.name,
         'showMap': showMap,
         'mapPosition': mapPosition.name,
+        'panelScale': panelScale,
+        'panelOpacity': panelOpacity,
+        'mapScale': mapScale,
+        'mapOpacity': mapOpacity,
+        'logoScale': logoScale,
+        'logoOpacity': logoOpacity,
+        'compassScale': compassScale,
+        'compassOpacity': compassOpacity,
       };
 
   factory WatermarkConfig.fromJson(Map<String, dynamic> j) {
+    double d(Object? v, double fallback) => v is num ? v.toDouble() : fallback;
     T pick<T extends Enum>(List<T> values, Object? name, T fallback) =>
         values.where((v) => v.name == name).firstOrNull ?? fallback;
     return WatermarkConfig(
@@ -135,6 +189,14 @@ class WatermarkConfig {
       logoPosition: pick(OverlayPosition.values, j['logoPosition'], OverlayPosition.supDer),
       showMap: j['showMap'] as bool? ?? false,
       mapPosition: pick(OverlayPosition.values, j['mapPosition'], OverlayPosition.supIzq),
+      panelScale: d(j['panelScale'], 1.0),
+      panelOpacity: d(j['panelOpacity'], 0.65),
+      mapScale: d(j['mapScale'], 1.0),
+      mapOpacity: d(j['mapOpacity'], 1.0),
+      logoScale: d(j['logoScale'], 1.0),
+      logoOpacity: d(j['logoOpacity'], 1.0),
+      compassScale: d(j['compassScale'], 1.0),
+      compassOpacity: d(j['compassOpacity'], 1.0),
     );
   }
 }
