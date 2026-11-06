@@ -22,6 +22,9 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
   Future<List<Channel>>? _list;
   String? _error;
 
+  /// null = consultando; '' = sin acceso; otro = nombre de la institución.
+  String? _institution;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +40,11 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
 
   void _reload() {
     if (!b.configured) return;
+    b.myInstitution().then((v) {
+      if (mounted) setState(() => _institution = v ?? '');
+    }).catchError((Object e) {
+      if (mounted) setState(() => _error = e.toString());
+    });
     setState(() {
       _error = null;
       _list = b.myChannels().catchError((Object e) {
@@ -151,7 +159,19 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
           const SizedBox(height: 16),
           if (!b.configured)
             _ServerSetup(onSaved: _reload)
+          else if (_institution == null && _error == null)
+            const Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator()))
+          else if (_institution == '')
+            _AccessCodeCard(myName: _myName, onGranted: (inst) {
+              setState(() => _institution = inst);
+              _reload();
+            })
           else ...[
+            if (_institution != null && _institution!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: StatusPill(label: _institution!, color: AppColors.teal, icon: Icons.verified_user),
+              ),
             Row(children: [
               Expanded(child: GradientButton(label: 'Crear canal', icon: Icons.add, onPressed: _create)),
               const SizedBox(width: 10),
@@ -242,6 +262,74 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
       ),
     );
   }
+}
+
+/// Primer ingreso: código de acceso de la institución.
+class _AccessCodeCard extends StatefulWidget {
+  const _AccessCodeCard({required this.myName, required this.onGranted});
+  final String myName;
+  final ValueChanged<String> onGranted;
+
+  @override
+  State<_AccessCodeCard> createState() => _AccessCodeCardState();
+}
+
+class _AccessCodeCardState extends State<_AccessCodeCard> {
+  final _code = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final inst = await services.channels.registerAccess(_code.text, widget.myName);
+      widget.onGranted(inst);
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => GlassCard(
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            Icon(Icons.lock_outline, color: AppColors.cyan),
+            SizedBox(width: 10),
+            Text('Acceso de la institución', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+          ]),
+          const SizedBox(height: 6),
+          const Text(
+            'Los canales son solo para el equipo autorizado. Ingresa el código que te dio el administrador. '
+            'Se pide una sola vez en este teléfono.',
+            style: TextStyle(color: AppColors.textMuted, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _code,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: 'Código de acceso', prefixIcon: Icon(Icons.key)),
+            onSubmitted: (_) => _submit(),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!, style: const TextStyle(color: AppColors.danger)),
+          ],
+          const SizedBox(height: 14),
+          GradientButton(label: 'Entrar', icon: Icons.login, busy: _busy, onPressed: _submit),
+        ]),
+      );
 }
 
 /// Configuración del servidor (URL + clave pública de Supabase).

@@ -167,6 +167,30 @@ class ChannelBackend extends ChangeNotifier {
     }
   }
 
+  /// Nombre de la institución de este teléfono, o null si aún no ingresó el código.
+  Future<String?> myInstitution() async {
+    await ensureReady();
+    try {
+      final r = await _db.rpc('my_institution');
+      return r is String && r.isNotEmpty ? r : null;
+    } on PostgrestException catch (e) {
+      // Servidor sin control de acceso (script antiguo): se permite el uso.
+      if (e.code == 'PGRST202') return 'Sin control de acceso';
+      throw ChannelException(_friendly(e));
+    }
+  }
+
+  /// Autoriza este teléfono con el código de acceso de la institución.
+  Future<String> registerAccess(String code, String displayName) async {
+    await ensureReady();
+    try {
+      final r = await _db.rpc('register_access', params: {'p_code': code, 'p_display': displayName});
+      return r as String;
+    } on PostgrestException catch (e) {
+      throw ChannelException(_friendly(e));
+    }
+  }
+
   dynamic _single(dynamic r) => r is List ? (r.isEmpty ? null : r.first) : r;
 
   Future<Channel> create(String name, String displayName) async {
@@ -274,6 +298,8 @@ class ChannelBackend extends ChangeNotifier {
   String _friendly(PostgrestException e) {
     final m = e.message;
     if (m.contains('no válido')) return 'Código de canal no válido.';
+    if (m.contains('acceso incorrecto')) return 'Código de acceso incorrecto. Pídelo al administrador.';
+    if (m.contains('Sin acceso')) return 'Primero ingresa el código de acceso de tu institución.';
     if (m.contains('does not exist') || e.code == 'PGRST202') {
       return 'El servidor no está preparado. Ejecuta el script supabase/instalar_canales.sql.';
     }
