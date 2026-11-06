@@ -7,7 +7,7 @@ import '../../app_services.dart';
 import '../../core/ui/glass.dart';
 import '../capture/presentation/camera_screen.dart';
 import '../inspections/presentation/inspections_screen.dart';
-import '../settings/settings_screen.dart';
+import '../channels/channels_screen.dart';
 import '../visits/visits_screen.dart';
 import 'dashboard_screen.dart';
 
@@ -47,7 +47,7 @@ class _HomeShellState extends State<HomeShell> {
       DashboardScreen(refresh: refresh, onNavigate: _go, onCamera: _openCamera),
       InspectionsScreen(refresh: refresh),
       VisitsScreen(refresh: refresh),
-      const SettingsScreen(),
+      ChannelsScreen(refresh: refresh),
     ];
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -86,8 +86,8 @@ class _GlassNavBar extends StatelessWidget {
   static const _items = [
     (Icons.space_dashboard_outlined, Icons.space_dashboard, 'Panel'),
     (Icons.fact_check_outlined, Icons.fact_check, 'Inspecciones'),
-    (Icons.map_outlined, Icons.map, 'Visitas'),
-    (Icons.tune_outlined, Icons.tune, 'Ajustes'),
+    (Icons.map_outlined, Icons.map, 'Mapa'),
+    (Icons.forum_outlined, Icons.forum, 'Canales'),
   ];
 
   @override

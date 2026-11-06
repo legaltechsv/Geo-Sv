@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 /// v1: captures
 /// v2: + captures.inspection_id, inspections, checklist_items
 /// v3: + captures.heading (rumbo de la cámara), captures.activity
+/// v4: + captures.segment_id, captures.point_role, segments (tramos)
 class AppDatabase {
   AppDatabase._();
   static final instance = AppDatabase._();
@@ -14,10 +15,11 @@ class AppDatabase {
 
   Future<Database> get db async => _db ??= await openDatabase(
         p.join(await getDatabasesPath(), 'geomark.db'),
-        version: 3,
+        version: 4,
         onCreate: (d, _) async {
           await _createCaptures(d);
           await _createInspections(d);
+          await _createSegments(d);
         },
         onUpgrade: (d, oldV, _) async {
           if (oldV < 2) {
@@ -29,6 +31,11 @@ class AppDatabase {
           if (oldV < 3) {
             await d.execute('ALTER TABLE captures ADD COLUMN heading REAL');
             await d.execute('ALTER TABLE captures ADD COLUMN activity TEXT');
+          }
+          if (oldV < 4) {
+            await d.execute('ALTER TABLE captures ADD COLUMN segment_id TEXT');
+            await d.execute('ALTER TABLE captures ADD COLUMN point_role TEXT');
+            await _createSegments(d);
           }
         },
       );
@@ -51,10 +58,26 @@ class AppDatabase {
         file_sha256 TEXT NOT NULL,
         inspection_id TEXT,
         heading REAL,
-        activity TEXT
+        activity TEXT,
+        segment_id TEXT,
+        point_role TEXT
       )''');
     await d.execute('CREATE INDEX idx_captures_pending ON captures(address_pending)');
     await d.execute('CREATE INDEX idx_captures_inspection ON captures(inspection_id)');
+  }
+
+  static Future<void> _createSegments(Database d) async {
+    await d.execute('''
+      CREATE TABLE segments(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        mark_interval_m REAL NOT NULL DEFAULT 10,
+        width_m REAL,
+        notes TEXT NOT NULL DEFAULT '',
+        created_at_utc TEXT NOT NULL,
+        closed INTEGER NOT NULL DEFAULT 0
+      )''');
+    await d.execute('CREATE INDEX idx_captures_segment ON captures(segment_id)');
   }
 
   static Future<void> _createInspections(Database d) async {

@@ -20,6 +20,8 @@ class CaptureRecord {
     this.inspectionId,
     this.heading,
     this.activity,
+    this.segmentId,
+    this.pointRole,
   });
 
   final String id;
@@ -51,6 +53,11 @@ class CaptureRecord {
   /// Actividad que el usuario indicó después de tomar la foto.
   final String? activity;
 
+  /// Tramo de calle al que pertenece y rol del punto ('inicio',
+  /// 'intermedio', 'final').
+  final String? segmentId;
+  final String? pointRole;
+
   bool get addressPending => address == null;
   String get mapsUrl => MapsLink.search(latitude, longitude);
   String get directionsUrl => MapsLink.directions(latitude, longitude);
@@ -73,6 +80,8 @@ class CaptureRecord {
         inspectionId: inspectionId,
         heading: heading,
         activity: activity,
+        segmentId: segmentId,
+        pointRole: pointRole,
       );
 
   Map<String, Object?> toMap() => {
@@ -92,6 +101,8 @@ class CaptureRecord {
         'inspection_id': inspectionId,
         'heading': heading,
         'activity': activity,
+        'segment_id': segmentId,
+        'point_role': pointRole,
       };
 
   factory CaptureRecord.fromMap(Map<String, Object?> m) => CaptureRecord(
@@ -110,5 +121,7 @@ class CaptureRecord {
         inspectionId: m['inspection_id'] as String?,
         heading: (m['heading'] as num?)?.toDouble(),
         activity: m['activity'] as String?,
+        segmentId: m['segment_id'] as String?,
+        pointRole: m['point_role'] as String?,
       );
 }

@@ -8,9 +8,33 @@ import '../branding/logo_service.dart';
 import '../capture/presentation/gallery_screen.dart';
 import 'settings_service.dart';
 
+/// Ajustes como pantalla independiente (se abre desde el Panel).
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => const AuroraBackground(
+        child: Scaffold(
+          appBar: _SettingsBar(),
+          body: SettingsScreen(embedded: true),
+        ),
+      );
+}
+
+class _SettingsBar extends StatelessWidget implements PreferredSizeWidget {
+  const _SettingsBar();
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  @override
+  Widget build(BuildContext context) => AppBar(title: const Text('Ajustes'));
+}
+
 /// Ajustes: logotipo, institución, inspector y opciones de la app.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.embedded = false});
+
+  /// true = dentro de SettingsPage (con barra superior propia).
+  final bool embedded;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -118,13 +142,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top;
+    final top = widget.embedded ? 0.0 : MediaQuery.paddingOf(context).top;
     return ListView(
-      padding: EdgeInsets.fromLTRB(18, top + 14, 18, 130),
+      padding: EdgeInsets.fromLTRB(18, top + 14, 18, widget.embedded ? 40 : 130),
       children: [
-        const Text('Ajustes',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-        const SizedBox(height: 16),
+        if (!widget.embedded) ...[
+          const Text('Ajustes',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+          const SizedBox(height: 16),
+        ],
 
         // ── Logotipo ──
         GlassCard(

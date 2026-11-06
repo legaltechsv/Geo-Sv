@@ -5,9 +5,11 @@ import 'core/permissions/permission_service.dart';
 import 'core/time/trusted_time_service.dart';
 import 'features/branding/logo_service.dart';
 import 'features/capture/application/capture_controller.dart';
+import 'features/channels/channel_backend.dart';
 import 'features/capture/data/capture_repository.dart';
 import 'features/inspections/data/inspection_repository.dart';
 import 'features/reports/report_service.dart';
+import 'features/segments/segment.dart';
 import 'features/settings/settings_service.dart';
 import 'features/sync/offline_sync_service.dart';
 import 'features/templates/watermark_template.dart';
@@ -31,6 +33,8 @@ class AppServices {
   final reports = ReportService();
   final compass = CompassService();
   final logo = LogoService();
+  final segments = SegmentRepository();
+  final channels = ChannelBackend();
 
   late final location = LocationService();
   late final camera = CaptureController(
@@ -48,6 +52,7 @@ class AppServices {
   Future<void> init() async {
     await settings.load();
     await logo.load();
+    await channels.loadConfig();
     sync.start();
   }
 }

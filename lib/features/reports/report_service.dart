@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/location/compass_service.dart';
 import '../capture/domain/capture_record.dart';
+import '../segments/segment.dart';
 import 'docx_builder.dart';
 import '../inspections/domain/checklist_templates.dart';
 import '../inspections/domain/inspection.dart';
@@ -578,6 +579,208 @@ class ReportService {
         final r = im.width > 900 ? img.copyResize(im, width: 900) : im;
         return (Uint8List.fromList(img.encodeJpg(r, quality: 72)), r.width, r.height);
       });
+
+  // ───────────────────────── Reporte de tramo (PDF y Word) ─────────────────────────
+
+  /// Enlace de Google Maps con la ruta del tramo (inicio → final, hasta 8 puntos intermedios).
+  static String segmentRouteUrl(SegmentGeometry g) {
+    String c(StationPoint p) =>
+        '${p.photo.latitude.toStringAsFixed(6)},${p.photo.longitude.toStringAsFixed(6)}';
+    final pts = g.points;
+    if (pts.isEmpty) return '';
+    if (pts.length == 1) return pts.first.photo.mapsUrl;
+    final mid = pts.sublist(1, pts.length - 1);
+    final step = mid.length <= 8 ? 1 : (mid.length / 8).ceil();
+    final way = [for (var i = 0; i < mid.length; i += step) c(mid[i])].join('|');
+    return 'https://www.google.com/maps/dir/?api=1&travelmode=walking'
+        '&origin=${c(pts.first)}&destination=${c(pts.last)}'
+        '${way.isEmpty ? '' : '&waypoints=${Uri.encodeComponent(way)}'}';
+  }
+
+  static String _roleLabel(PointRole r) => switch (r) {
+        PointRole.inicio => 'Inicio',
+        PointRole.fin => 'Final',
+        PointRole.intermedio => 'Intermedio',
+      };
+
+  Future<Uint8List> segmentReport({
+    required Segment segment,
+    required SegmentGeometry geo,
+    required AppSettings settings,
+    Uint8List? logo,
+  }) async {
+    final logoImg = logo == null ? null : pw.MemoryImage(logo);
+    final thumbs = <(StationPoint, pw.MemoryImage)>[];
+    for (final p in geo.points) {
+      final f = File(p.photo.filePath);
+      if (await f.exists()) thumbs.add((p, pw.MemoryImage(await _downscale(await f.readAsBytes()))));
+    }
+    final area = segment.widthM == null ? null : geo.length * segment.widthM!;
+    final route = segmentRouteUrl(geo);
+    final doc = pw.Document(title: 'Tramo ${segment.name}', creator: 'GeoMark');
+    doc.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.letter,
+      margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
+      header: (ctx) => _header(settings, 'LEVANTAMIENTO DE TRAMO', segment.name, logoImg),
+      footer: _footer,
+      build: (ctx) => [
+        pw.Row(children: [
+          _metric('${geo.length.toStringAsFixed(1)} m', 'Longitud total'),
+          _metric(area == null ? '—' : '${area.toStringAsFixed(1)} m²',
+              area == null ? 'Área (sin ancho)' : 'Área (ancho ${segment.widthM} m)'),
+          _metric('${geo.points.length}', 'Puntos / fotos'),
+          _metric('±${geo.worstAccuracy.toStringAsFixed(0)} m', 'Precisión GPS (peor)'),
+        ]),
+        pw.SizedBox(height: 10),
+        if (route.isNotEmpty)
+          pw.Row(children: [
+            pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: route, width: 70, height: 70),
+            pw.SizedBox(width: 10),
+            pw.Expanded(
+              child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                pw.Text('Recorrido en Google Maps', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                pw.UrlLink(
+                  destination: route,
+                  child: pw.Text('Abrir ruta del tramo (inicio → final)',
+                      style: const pw.TextStyle(fontSize: 9, color: _accent)),
+                ),
+                pw.Text('Estaciones marcadas cada ${segment.markIntervalM.toStringAsFixed(0)} m.',
+                    style: const pw.TextStyle(fontSize: 8, color: _muted)),
+              ]),
+            ),
+          ]),
+        pw.SizedBox(height: 14),
+        _sectionTitle('Puntos del tramo'),
+        pw.TableHelper.fromTextArray(
+          headers: ['#', 'Punto', 'Estación', 'Parcial', 'Coordenadas', 'Hora', 'Actividad'],
+          data: [
+            for (final (i, p) in geo.points.indexed)
+              [
+                '${i + 1}',
+                _roleLabel(p.role),
+                SegmentGeometry.station(p.station),
+                i == 0 ? '—' : '${p.partial.toStringAsFixed(1)} m',
+                p.photo.coordsText,
+                _dt.format(_local(p.photo.capturedAtUtc)),
+                p.photo.activity ?? '',
+              ],
+          ],
+          headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+          headerDecoration: const pw.BoxDecoration(color: _ink),
+          cellStyle: const pw.TextStyle(fontSize: 8),
+          oddRowDecoration: const pw.BoxDecoration(color: _soft),
+        ),
+        if (geo.marks.isNotEmpty) ...[
+          pw.SizedBox(height: 14),
+          _sectionTitle('Estaciones cada ${segment.markIntervalM.toStringAsFixed(0)} m'),
+          pw.TableHelper.fromTextArray(
+            headers: ['Estación', 'Coordenadas'],
+            data: [
+              for (final m in geo.marks)
+                [
+                  SegmentGeometry.station(m.station),
+                  '${m.position.latitude.toStringAsFixed(6)}, ${m.position.longitude.toStringAsFixed(6)}',
+                ],
+            ],
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: _ink),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            oddRowDecoration: const pw.BoxDecoration(color: _soft),
+          ),
+        ],
+        if (segment.notes.trim().isNotEmpty) ...[
+          pw.SizedBox(height: 12),
+          _sectionTitle('Observaciones'),
+          pw.Text(segment.notes, style: const pw.TextStyle(fontSize: 10)),
+        ],
+        if (thumbs.isNotEmpty) ...[
+          pw.SizedBox(height: 14),
+          _sectionTitle('Fotografías por estación'),
+          pw.Wrap(spacing: 10, runSpacing: 10, children: [
+            for (final (p, im) in thumbs)
+              pw.SizedBox(
+                width: 165,
+                child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                  pw.Image(im, height: 124, width: 165, fit: pw.BoxFit.cover),
+                  pw.Text('Est. ${SegmentGeometry.station(p.station)} · ${_roleLabel(p.role)}',
+                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  pw.UrlLink(
+                    destination: p.photo.mapsUrl,
+                    child: pw.Text(p.photo.coordsText, style: const pw.TextStyle(fontSize: 7, color: _accent)),
+                  ),
+                ]),
+              ),
+          ]),
+        ],
+      ],
+    ));
+    return doc.save();
+  }
+
+  Future<Uint8List> segmentDocx({
+    required Segment segment,
+    required SegmentGeometry geo,
+    required AppSettings settings,
+    Uint8List? logo,
+  }) async {
+    final d = DocxBuilder();
+    _docxHeader(d, settings, 'LEVANTAMIENTO DE TRAMO', segment.name, logo);
+    final area = segment.widthM == null ? null : geo.length * segment.widthM!;
+    d.table([
+      ['Longitud total', 'Área', 'Puntos', 'Estaciones cada', 'Precisión GPS (peor)'],
+      [
+        '${geo.length.toStringAsFixed(1)} m',
+        area == null ? '—' : '${area.toStringAsFixed(1)} m² (ancho ${segment.widthM} m)',
+        '${geo.points.length}',
+        '${segment.markIntervalM.toStringAsFixed(0)} m',
+        '±${geo.worstAccuracy.toStringAsFixed(0)} m',
+      ],
+    ]);
+    final route = segmentRouteUrl(geo);
+    if (route.isNotEmpty) d.link('Abrir ruta del tramo en Google Maps', route);
+    d.heading('Puntos del tramo', size: 24);
+    d.table([
+      ['#', 'Punto', 'Estación', 'Parcial', 'Coordenadas', 'Hora', 'Actividad'],
+      for (final (i, p) in geo.points.indexed)
+        [
+          '${i + 1}',
+          _roleLabel(p.role),
+          SegmentGeometry.station(p.station),
+          i == 0 ? '—' : '${p.partial.toStringAsFixed(1)} m',
+          p.photo.coordsText,
+          _dt.format(_local(p.photo.capturedAtUtc)),
+          p.photo.activity ?? '',
+        ],
+    ], widths: [5, 12, 12, 10, 27, 17, 17], size: 16);
+    if (geo.marks.isNotEmpty) {
+      d.heading('Estaciones cada ${segment.markIntervalM.toStringAsFixed(0)} m', size: 24);
+      d.table([
+        ['Estación', 'Coordenadas'],
+        for (final m in geo.marks)
+          [
+            SegmentGeometry.station(m.station),
+            '${m.position.latitude.toStringAsFixed(6)}, ${m.position.longitude.toStringAsFixed(6)}',
+          ],
+      ], widths: [30, 70]);
+    }
+    if (segment.notes.trim().isNotEmpty) {
+      d.heading('Observaciones', size: 24);
+      d.paragraph(segment.notes);
+    }
+    if (geo.points.isNotEmpty) {
+      d.heading('Fotografías por estación', size: 24);
+      for (final p in geo.points) {
+        final f = File(p.photo.filePath);
+        if (!await f.exists()) continue;
+        final (bytes, w, h) = await _downscaleSized(await f.readAsBytes());
+        d.image(bytes, widthPx: 400, heightPx: 400 * h / w);
+        d.paragraph('Est. ${SegmentGeometry.station(p.station)} · ${_roleLabel(p.role)} · ${p.photo.coordsText}',
+            size: 16, color: '5B6478');
+      }
+    }
+    _docxFooter(d);
+    return d.build();
+  }
 
   // ───────────────────────── Piezas comunes ─────────────────────────
 

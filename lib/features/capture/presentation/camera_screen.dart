@@ -14,6 +14,7 @@ import '../application/capture_controller.dart';
 import '../domain/capture_record.dart';
 import 'gallery_screen.dart';
 import 'preview_screen.dart';
+import '../../segments/point_role_sheet.dart';
 import 'widgets/activity_sheet.dart';
 import 'widgets/compass_widget.dart';
 import 'widgets/live_watermark_overlay.dart';
@@ -40,6 +41,8 @@ class CameraScreen extends StatefulWidget {
     required this.controller,
     required this.templates,
     this.inspectionId,
+    this.segmentId,
+    this.returnOnCapture = false,
   });
   final CaptureController controller;
   final TemplateController templates;
@@ -47,6 +50,12 @@ class CameraScreen extends StatefulWidget {
   /// Si viene, las fotos se vinculan a esa inspección y el visor se queda
   /// abierto para tomar varias seguidas.
   final String? inspectionId;
+
+  /// Modo tramo: cada foto pregunta inicio/intermedio/final.
+  final String? segmentId;
+
+  /// Cierra el visor y devuelve la foto (lo usan los Canales).
+  final bool returnOnCapture;
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -122,9 +131,20 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         askActivity: services.settings.value.askActivity && mounted
             ? () => askActivity(context)
             : null,
+        segmentId: widget.segmentId,
+        askPointRole: widget.segmentId == null ? null : () => askPointRole(context),
       );
       if (!mounted) return;
-      if (widget.inspectionId != null) {
+      if (widget.returnOnCapture) {
+        Navigator.pop(context, record);
+        return;
+      }
+      if (widget.segmentId != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Punto agregado al tramo (${record.pointRole ?? 'intermedio'})'),
+          duration: const Duration(seconds: 1),
+        ));
+      } else if (widget.inspectionId != null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Foto agregada a la inspección'),
           duration: Duration(seconds: 1),

@@ -209,6 +209,8 @@ class CaptureController extends ChangeNotifier {
     double? heading,
     Uint8List? logo,
     Future<String?> Function()? askActivity,
+    String? segmentId,
+    Future<String?> Function()? askPointRole,
   }) async {
     final cam = camera;
     if (cam == null || !cam.value.isInitialized) {
@@ -248,6 +250,8 @@ class CaptureController extends ChangeNotifier {
       final rawActivity = askActivity == null ? null : await askActivity();
       final activity =
           (rawActivity == null || rawActivity.trim().isEmpty) ? null : rawActivity.trim();
+      // En modo tramo: ¿inicio, intermedio o final?
+      final pointRole = askPointRole == null ? null : await askPointRole();
 
       // 3. Hora confiable y datos derivados.
       final t = time.now(gnssTimestamp: fix.timestamp);
@@ -306,6 +310,8 @@ class CaptureController extends ChangeNotifier {
         inspectionId: inspectionId,
         heading: heading,
         activity: activity,
+        segmentId: segmentId,
+        pointRole: segmentId == null ? null : (pointRole ?? 'intermedio'),
       );
       await repository.insert(record);
       lastRecord.value = record;

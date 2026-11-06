@@ -25,6 +25,15 @@ class CaptureRepository {
     return rows.map(CaptureRecord.fromMap).toList();
   }
 
+  Future<List<CaptureRecord>> bySegment(String segmentId) async {
+    final rows = await (await _database).query('captures',
+        where: 'segment_id = ?', whereArgs: [segmentId], orderBy: 'captured_at_utc ASC');
+    return rows.map(CaptureRecord.fromMap).toList();
+  }
+
+  Future<void> updatePointRole(String id, String role) async => (await _database)
+      .update('captures', {'point_role': role}, where: 'id = ?', whereArgs: [id]);
+
   Future<int> count() async {
     final r = await (await _database).rawQuery('SELECT COUNT(*) c FROM captures');
     return Sqflite.firstIntValue(r) ?? 0;

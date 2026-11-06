@@ -9,6 +9,7 @@ import '../inspections/domain/checklist_templates.dart';
 import '../inspections/domain/inspection.dart';
 import '../inspections/presentation/inspection_detail_screen.dart';
 import '../inspections/presentation/new_inspection_sheet.dart';
+import '../settings/settings_screen.dart';
 import '../visits/visits_service.dart';
 
 class _DashboardData {
@@ -90,6 +91,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return h < 12 ? 'Buenos días' : (h < 19 ? 'Buenas tardes' : 'Buenas noches');
   }
 
+  Future<void> _openSettings() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
+    _reload();
+  }
+
   Future<void> _newInspection() async {
     final created = await showNewInspectionSheet(context);
     if (created != null && mounted) {
@@ -129,12 +135,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: const TextStyle(color: AppColors.cyan, fontSize: 13)),
                     ]),
                   ),
+                  IconButton(
+                    tooltip: 'Ajustes',
+                    icon: const Icon(Icons.settings_outlined),
+                    onPressed: _openSettings,
+                  ),
                   ValueListenableBuilder<String?>(
                     valueListenable: services.logo,
                     builder: (_, path, __) => GlassCard(
                       radius: 16,
                       padding: EdgeInsets.all(path == null ? 10 : 6),
-                      onTap: () => widget.onNavigate(3),
+                      onTap: () => _openSettings(),
                       child: path == null
                           ? const Icon(Icons.add_photo_alternate_outlined)
                           : Container(
@@ -153,7 +164,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   index: 1,
                   child: GlassCard(
                     tint: AppColors.amber,
-                    onTap: () => widget.onNavigate(3),
+                    onTap: () => _openSettings(),
                     child: const Row(children: [
                       Icon(Icons.info_outline, color: AppColors.amber),
                       SizedBox(width: 12),

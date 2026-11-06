@@ -10,6 +10,7 @@ import '../../core/utils/maps_link.dart';
 import '../inspections/domain/inspection.dart';
 import '../inspections/presentation/inspection_detail_screen.dart';
 import '../reports/pdf_preview_screen.dart';
+import '../segments/segments_list.dart';
 import 'visits_service.dart';
 
 /// Reporte de lugares visitados: mapa con todos los puntos + lista por lugar
@@ -27,6 +28,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
   late Future<List<VisitedPlace>> _data = services.visits.places(_range);
   final _map = MapController();
   bool _exporting = false;
+  bool _showSegments = false;
 
   @override
   void initState() {
@@ -95,10 +97,11 @@ class _VisitsScreenState extends State<VisitsScreen> {
           padding: EdgeInsets.fromLTRB(18, top + 14, 18, 130),
           children: [
             Row(children: [
-              const Expanded(
-                child: Text('Lugares visitados',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+              Expanded(
+                child: Text(_showSegments ? 'Tramos' : 'Lugares visitados',
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
               ),
+              if (!_showSegments)
               IconButton.filledTonal(
                 tooltip: 'Exportar PDF',
                 onPressed: places.isEmpty || _exporting ? null : () => _export(places),
@@ -108,6 +111,17 @@ class _VisitsScreenState extends State<VisitsScreen> {
               ),
             ]),
             const SizedBox(height: 12),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Lugares'), icon: Icon(Icons.place_outlined)),
+                ButtonSegment(value: true, label: Text('Tramos'), icon: Icon(Icons.timeline)),
+              ],
+              selected: {_showSegments},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => setState(() => _showSegments = s.first),
+            ),
+            const SizedBox(height: 12),
+            if (_showSegments) SegmentsList(refresh: widget.refresh) else ...[
             SegmentedButton<VisitRange>(
               segments: [
                 for (final r in VisitRange.values) ButtonSegment(value: r, label: Text(r.label)),
@@ -149,6 +163,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
                 index: n.clamp(0, 8),
                 child: _PlaceCard(place: p, number: n + 1, onFocus: () => _focus(p), onChanged: _reload),
               ),
+            ],
           ],
         );
       },
