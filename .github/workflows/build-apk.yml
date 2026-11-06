@@ -35,6 +35,9 @@ jobs:
       - name: Descargar dependencias
         run: flutter pub get
 
+      - name: Generar ícono de la app
+        run: dart run flutter_launcher_icons
+
       - name: Análisis de código (informativo)
         run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
@@ -51,6 +54,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: GeoMark build ${{ github.run_number }}
+          name: Pro-Cam CuscaSur v ${{ github.run_number }}
           body: Descarga app-release.apk en tu teléfono Android e instálala.
           files: build/app/outputs/flutter-apk/app-release.apk

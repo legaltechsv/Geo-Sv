@@ -1,5 +1,5 @@
 name: geomark
-description: Documentación fotográfica en campo con enrutamiento GPS (foto -> Google Maps).
+description: Pro-Cam CuscaSur - evidencia fotográfica en campo con GPS, inspecciones y tramos.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -70,6 +70,16 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
+
+# Ícono de la app (lo genera GitHub Actions en cada compilación)
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: assets/icon/icon.png
+  adaptive_icon_background: assets/icon/icon_background.png
+  adaptive_icon_foreground: assets/icon/icon_foreground.png
 
 flutter:
   uses-material-design: true

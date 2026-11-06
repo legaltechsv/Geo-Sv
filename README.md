@@ -1,4 +1,4 @@
-# GeoMark Inspecciones — Evidencia fotográfica, inspecciones y visitas con GPS
+# Pro-Cam CuscaSur — Evidencia fotográfica, inspecciones y visitas con GPS
 
 ## Instalar en Android sin instalar nada en tu computadora
 

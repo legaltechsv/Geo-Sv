@@ -17,16 +17,16 @@ Future<void> main() async {
   ));
   await initializeDateFormatting('es');
   await services.init();
-  runApp(const GeoMarkApp());
+  runApp(const ProCamApp());
 }
 
-class GeoMarkApp extends StatelessWidget {
-  const GeoMarkApp({super.key});
+class ProCamApp extends StatelessWidget {
+  const ProCamApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'GeoMark Inspecciones',
+      title: 'Pro-Cam CuscaSur',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: const HomeShell(),
