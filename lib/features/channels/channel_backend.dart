@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../config/server_config.dart';
 import '../capture/domain/capture_record.dart';
 
 /// Canal (grupo de trabajo) compartido entre usuarios de la app.
@@ -124,8 +125,9 @@ class ChannelBackend extends ChangeNotifier {
 
   Future<void> loadConfig() async {
     final p = await SharedPreferences.getInstance();
-    url = p.getString('sbUrl');
-    anonKey = p.getString('sbKey');
+    // Servidor propio guardado por el usuario, o el de fábrica.
+    url = p.getString('sbUrl') ?? ServerConfig.supabaseUrl;
+    anonKey = p.getString('sbKey') ?? ServerConfig.supabasePublishableKey;
     notifyListeners();
   }
 
