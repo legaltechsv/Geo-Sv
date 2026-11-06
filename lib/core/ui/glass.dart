@@ -74,8 +74,77 @@ ThemeData buildAppTheme() {
   );
 }
 
+/// Inclinación 3D al tocar: la tarjeta "se hunde" hacia el dedo con
+/// perspectiva real y vuelve con un rebote suave al soltar.
+/// Usa un Listener (no compite con los toques/scroll de los hijos).
+class Tilt3D extends StatefulWidget {
+  const Tilt3D({super.key, required this.child, this.maxAngle = 0.10, this.pressScale = 0.975});
+  final Widget child;
+
+  /// Inclinación máxima en radianes (0.10 ≈ 6°).
+  final double maxAngle;
+  final double pressScale;
+
+  @override
+  State<Tilt3D> createState() => _Tilt3DState();
+}
+
+class _Tilt3DState extends State<Tilt3D> {
+  Offset _tilt = Offset.zero; // -1..1 en cada eje
+  bool _down = false;
+
+  void _update(Offset local) {
+    final size = context.size;
+    if (size == null || size.isEmpty) return;
+    setState(() {
+      _tilt = Offset(
+        ((local.dx / size.width) * 2 - 1).clamp(-1.0, 1.0),
+        ((local.dy / size.height) * 2 - 1).clamp(-1.0, 1.0),
+      );
+    });
+  }
+
+  void _release() => setState(() {
+        _down = false;
+        _tilt = Offset.zero;
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (e) {
+        _down = true;
+        _update(e.localPosition);
+      },
+      onPointerMove: (e) => _update(e.localPosition),
+      onPointerUp: (_) => _release(),
+      onPointerCancel: (_) => _release(),
+      child: TweenAnimationBuilder<Offset>(
+        tween: Tween(end: _tilt),
+        duration: Duration(milliseconds: _down ? 120 : 420),
+        curve: _down ? Curves.easeOut : Curves.elasticOut,
+        builder: (_, t, child) => AnimatedScale(
+          scale: _down ? widget.pressScale : 1,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          child: Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.0014) // perspectiva
+              ..rotateX(-t.dy * widget.maxAngle)
+              ..rotateY(t.dx * widget.maxAngle),
+            child: child,
+          ),
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 /// Panel de vidrio esmerilado: desenfoque del fondo + relleno translúcido
-/// + borde con degradado de luz (lo que da el efecto "glass" premium).
+/// + borde con degradado de luz + sombra de profundidad.
+/// Si es tocable (o [tilt] = true) se inclina en 3D al presionarlo.
 class GlassCard extends StatelessWidget {
   const GlassCard({
     super.key,
@@ -85,8 +154,11 @@ class GlassCard extends StatelessWidget {
     this.blur = 18,
     this.opacity = 0.08,
     this.onTap,
+    this.onLongPress,
     this.tint,
     this.margin,
+    this.tilt,
+    this.elevation = 1,
   });
 
   final Widget child;
@@ -96,29 +168,35 @@ class GlassCard extends StatelessWidget {
   final double blur;
   final double opacity;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   /// Color sutil para resaltar (p. ej. estado de la inspección).
   final Color? tint;
 
+  /// Forzar o desactivar la inclinación 3D (por defecto: solo si es tocable).
+  final bool? tilt;
+
+  /// 0 = sin sombra; 1 = sombra suave flotante; 2 = más alta.
+  final double elevation;
+
   @override
   Widget build(BuildContext context) {
     final r = BorderRadius.circular(radius);
-    return Container(
-      margin: margin,
-      child: ClipRRect(
-        borderRadius: r,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: r,
-              splashColor: Colors.white.withValues(alpha: 0.06),
-              highlightColor: Colors.white.withValues(alpha: 0.03),
-              child: CustomPaint(
-                foregroundPainter: _GlassBorderPainter(radius),
-                child: Container(
+    Widget card = ClipRRect(
+      borderRadius: r,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            borderRadius: r,
+            splashColor: Colors.white.withValues(alpha: 0.06),
+            highlightColor: Colors.white.withValues(alpha: 0.03),
+            child: CustomPaint(
+              foregroundPainter: _GlassBorderPainter(radius),
+              child: Container(
                 padding: padding,
                 decoration: BoxDecoration(
                   borderRadius: r,
@@ -133,11 +211,32 @@ class GlassCard extends StatelessWidget {
                 ),
                 child: child,
               ),
-              ),
             ),
           ),
         ),
       ),
+    );
+    if (elevation > 0) {
+      card = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: r,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22 * elevation),
+              blurRadius: 18 * elevation,
+              offset: Offset(0, 8 * elevation),
+            ),
+            if (tint != null)
+              BoxShadow(color: tint!.withValues(alpha: 0.12), blurRadius: 24, spreadRadius: -4),
+          ],
+        ),
+        child: card,
+      );
+    }
+    final doTilt = tilt ?? (onTap != null || onLongPress != null);
+    return Padding(
+      padding: margin ?? EdgeInsets.zero,
+      child: doTilt ? Tilt3D(child: card) : card,
     );
   }
 }
@@ -270,7 +369,9 @@ class GradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    return Tilt3D(
+      maxAngle: 0.06,
+      child: DecoratedBox(
       decoration: BoxDecoration(
         gradient: AppColors.accentGradient,
         borderRadius: BorderRadius.circular(16),
@@ -308,6 +409,7 @@ class GradientButton extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

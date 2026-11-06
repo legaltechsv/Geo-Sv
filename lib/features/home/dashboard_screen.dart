@@ -183,6 +183,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               FadeSlideIn(
                 index: 1,
                 child: GlassCard(
+                  tilt: true,
+                  elevation: 2,
                   padding: const EdgeInsets.all(20),
                   child: Row(children: [
                     ProgressRing(value: d?.avgCompliance ?? 0, size: 86),
@@ -293,6 +295,7 @@ class _Kpi extends StatelessWidget {
         child: FadeSlideIn(
           index: index,
           child: GlassCard(
+            tilt: true,
             padding: const EdgeInsets.all(14),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Container(
