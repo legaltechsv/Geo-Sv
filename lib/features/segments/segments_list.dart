@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../app_services.dart';
+import '../../core/geocoding/street_detector.dart';
+import '../../core/permissions/permission_service.dart';
 import '../../core/ui/glass.dart';
 import 'segment.dart';
 import 'segment_detail_screen.dart';
@@ -128,6 +130,58 @@ class _NewSegmentFormState extends State<_NewSegmentForm> {
   final _width = TextEditingController();
   double _interval = 10;
 
+  // Detección automática de la calle / intersección.
+  bool _detecting = false;
+  bool _userEdited = false; // si el usuario escribe, no se le pisa el texto
+  bool _settingText = false;
+  List<String> _suggestions = const [];
+  String? _detectMsg;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.addListener(() {
+      if (!_settingText) _userEdited = true;
+    });
+    _detect();
+  }
+
+  Future<void> _detect() async {
+    setState(() {
+      _detecting = true;
+      _detectMsg = null;
+    });
+    try {
+      if (await services.permissions.ensureLocation() != PermissionOutcome.granted) {
+        throw Exception('Sin permiso de ubicación');
+      }
+      final fix = await services.location.getFixAtShutter(timeout: const Duration(seconds: 8));
+      final guess = await StreetDetector().detect(fix.latitude, fix.longitude);
+      if (!mounted) return;
+      final sug = guess.suggestions();
+      setState(() {
+        _suggestions = sug;
+        _detectMsg = sug.isEmpty
+            ? 'No se reconoció el nombre de la calle aquí. Escríbelo.'
+            : (guess.cross.isNotEmpty
+                ? 'Intersección detectada. Puedes elegir otra opción o editarla.'
+                : 'Calle detectada. Puedes editarla.');
+      });
+      if (sug.isNotEmpty && !_userEdited) _setName(sug.first);
+    } catch (_) {
+      if (mounted) setState(() => _detectMsg = 'No se pudo detectar la calle (sin GPS o sin internet). Escríbela.');
+    } finally {
+      if (mounted) setState(() => _detecting = false);
+    }
+  }
+
+  void _setName(String v) {
+    _settingText = true;
+    _name.text = v;
+    _name.selection = TextSelection.collapsed(offset: v.length);
+    _settingText = false;
+  }
+
   @override
   void dispose() {
     _name.dispose();
@@ -153,14 +207,44 @@ class _NewSegmentFormState extends State<_NewSegmentForm> {
           const SizedBox(height: 16),
           TextField(
             controller: _name,
-            autofocus: true,
             textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Nombre del tramo *',
+            decoration: InputDecoration(
+              labelText: 'Nombre del tramo / calle *',
               hintText: '4a Calle Oriente, entre 2a y 4a Av.',
-              prefixIcon: Icon(Icons.add_road),
+              prefixIcon: const Icon(Icons.add_road),
+              suffixIcon: _detecting
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : IconButton(
+                      tooltip: 'Detectar de nuevo',
+                      icon: const Icon(Icons.my_location),
+                      onPressed: () {
+                        _userEdited = false;
+                        _detect();
+                      },
+                    ),
             ),
           ),
+          const SizedBox(height: 6),
+          Text(
+            _detecting ? 'Detectando la calle donde estás…' : (_detectMsg ?? ''),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          if (_suggestions.length > 1) ...[
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final s in _suggestions)
+                ActionChip(
+                  avatar: const Icon(Icons.auto_awesome, size: 16, color: AppColors.cyan),
+                  label: Text(s, overflow: TextOverflow.ellipsis),
+                  onPressed: () => _setName(s),
+                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+                ),
+            ]),
+          ],
           const SizedBox(height: 16),
           const Text('Marcar estación cada', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),

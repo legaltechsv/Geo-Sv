@@ -33,12 +33,16 @@ class PreviewScreen extends StatelessWidget {
     return AuroraBackground(
       child: Scaffold(
         appBar: AppBar(title: const Text('Evidencia', style: TextStyle(fontSize: 20))),
-        body: ListView(
+        body: _HintedList(
           padding: EdgeInsets.fromLTRB(16, 0, 16, bottom + 24),
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: InteractiveViewer(child: Image.file(File(r.filePath))),
+              // Altura limitada para que debajo se asomen el mapa y los datos.
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.58),
+                child: InteractiveViewer(child: Image.file(File(r.filePath), fit: BoxFit.contain)),
+              ),
             ),
             const SizedBox(height: 12),
             if (r.support)
@@ -278,5 +282,88 @@ class _DirectionMap extends StatelessWidget {
         const SimpleAttributionWidget(source: Text('OpenStreetMap')),
       ],
     );
+  }
+}
+
+
+/// Lista con indicación flotante "Desliza para ver los datos" que rebota
+/// suavemente y desaparece en cuanto el usuario baja.
+class _HintedList extends StatefulWidget {
+  const _HintedList({required this.padding, required this.children});
+  final EdgeInsets padding;
+  final List<Widget> children;
+
+  @override
+  State<_HintedList> createState() => _HintedListState();
+}
+
+class _HintedListState extends State<_HintedList> with SingleTickerProviderStateMixin {
+  final _scroll = ScrollController();
+  late final AnimationController _bounce =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+  bool _show = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      final hide = _scroll.offset > 60;
+      if (hide == _show) setState(() => _show = !hide);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _bounce.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Stack(children: [
+      ListView(controller: _scroll, padding: widget.padding, children: widget.children),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: bottom + 18,
+        child: IgnorePointer(
+          ignoring: !_show,
+          child: AnimatedOpacity(
+            opacity: _show ? 1 : 0,
+            duration: const Duration(milliseconds: 250),
+            child: Center(
+              child: AnimatedBuilder(
+                animation: _bounce,
+                builder: (_, child) => Transform.translate(
+                  offset: Offset(0, 6 * Curves.easeInOut.transform(_bounce.value)),
+                  child: child,
+                ),
+                child: GestureDetector(
+                  onTap: () => _scroll.animateTo(
+                    MediaQuery.sizeOf(context).height * 0.5,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOutCubic,
+                  ),
+                  child: const GlassCard(
+                    radius: 22,
+                    elevation: 2,
+                    tint: AppColors.cyan,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text('Desliza para ver los datos de la foto',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                      SizedBox(width: 6),
+                      Icon(Icons.keyboard_double_arrow_down, color: AppColors.cyan),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ]);
   }
 }
