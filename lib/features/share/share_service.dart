@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/time/trusted_time_service.dart';
 import '../capture/domain/capture_record.dart';
 
 /// "Smart Share Payload": imagen + texto con enlace directo a Google Maps.
