@@ -22,7 +22,7 @@ class WatermarkData {
     required this.time,
     required this.address,
     required this.verificationCode,
-    this.brandLabel = 'Pro-Cam CuscaSur',
+    this.brandLabel = 'GEO CUSCA SUR',
     this.config = const WatermarkConfig(),
     this.heading,
     this.activity,

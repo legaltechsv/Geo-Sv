@@ -26,7 +26,7 @@ class ProCamApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Pro-Cam CuscaSur',
+      title: 'GEO CUSCA SUR',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: const HomeShell(),

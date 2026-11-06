@@ -41,6 +41,11 @@ jobs:
       - name: Análisis de código (informativo)
         run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
+      - name: Firma fija (permite actualizar la app sin desinstalar)
+        run: |
+          mkdir -p ~/.android
+          cp tool/signing/debug.keystore ~/.android/debug.keystore
+
       - name: Compilar APK
         run: flutter build apk --release
 
@@ -54,6 +59,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Pro-Cam CuscaSur v ${{ github.run_number }}
+          name: GEO CUSCA SUR v ${{ github.run_number }}
           body: Descarga app-release.apk en tu teléfono Android e instálala.
           files: build/app/outputs/flutter-apk/app-release.apk

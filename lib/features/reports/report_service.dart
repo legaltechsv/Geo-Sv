@@ -76,7 +76,7 @@ class ReportService {
     final doc = pw.Document(
       title: 'Informe ${inspection.folio}',
       author: settings.inspectorName,
-      creator: 'Pro-Cam CuscaSur',
+      creator: 'GEO CUSCA SUR',
     );
 
     doc.addPage(
@@ -287,7 +287,7 @@ class ReportService {
     final allVisits = [for (final p in places) ...p.visits]
       ..sort((a, b) => a.startedAtUtc.compareTo(b.startedAtUtc));
 
-    final doc = pw.Document(title: 'Reporte de lugares visitados', creator: 'Pro-Cam CuscaSur');
+    final doc = pw.Document(title: 'Reporte de lugares visitados', creator: 'GEO CUSCA SUR');
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter,
@@ -569,7 +569,7 @@ class ReportService {
 
   void _docxFooter(DocxBuilder d) {
     d.spacer();
-    d.paragraph('Generado con Pro-Cam CuscaSur · ${_dt.format(DateTime.now())}',
+    d.paragraph('Generado con GEO CUSCA SUR · ${_dt.format(DateTime.now())}',
         size: 14, color: '5B6478', italic: true);
   }
 
@@ -617,7 +617,7 @@ class ReportService {
     }
     final area = segment.widthM == null ? null : geo.length * segment.widthM!;
     final route = segmentRouteUrl(geo);
-    final doc = pw.Document(title: 'Tramo ${segment.name}', creator: 'Pro-Cam CuscaSur');
+    final doc = pw.Document(title: 'Tramo ${segment.name}', creator: 'GEO CUSCA SUR');
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.letter,
       margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
@@ -813,7 +813,7 @@ class ReportService {
   pw.Widget _footer(pw.Context ctx) => pw.Container(
         margin: const pw.EdgeInsets.only(top: 10),
         child: pw.Row(children: [
-          pw.Text('Generado con Pro-Cam CuscaSur · ${_dt.format(DateTime.now())}',
+          pw.Text('Generado con GEO CUSCA SUR · ${_dt.format(DateTime.now())}',
               style: const pw.TextStyle(fontSize: 7, color: _muted)),
           pw.Spacer(),
           pw.Text('Página ${ctx.pageNumber} de ${ctx.pagesCount}',

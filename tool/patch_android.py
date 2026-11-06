@@ -36,7 +36,7 @@ if 'android:scheme="https"' not in s:
     else:
         s = s.replace("</manifest>", f"    <queries>{intent}\n    </queries>\n</manifest>")
 
-s = re.sub(r'android:label="[^"]*"', 'android:label="Pro-Cam CuscaSur"', s, count=1)
+s = re.sub(r'android:label="[^"]*"', 'android:label="GEO CUSCA SUR"', s, count=1)
 manifest.write_text(s, encoding="utf-8")
 print("AndroidManifest actualizado")
 

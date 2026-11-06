@@ -1,4 +1,4 @@
-# Pro-Cam CuscaSur — Evidencia fotográfica, inspecciones y visitas con GPS
+# GEO CUSCA SUR — Evidencia fotográfica, inspecciones y visitas con GPS
 
 ## Instalar en Android sin instalar nada en tu computadora
 
