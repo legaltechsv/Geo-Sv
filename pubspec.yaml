@@ -59,6 +59,8 @@ dependencies:
   # Logotipo: elegir de la galería o descargar desde un enlace de Internet
   image_picker: ^1.1.2
   http: ^1.2.2
+  # Elegir el logotipo como archivo PNG, JPG o PDF
+  file_picker: ^8.1.2
   # Brújula (rumbo hacia donde apunta la cámara)
   flutter_compass: ^0.8.1
   # Generar reportes Word (.docx = ZIP con XML)

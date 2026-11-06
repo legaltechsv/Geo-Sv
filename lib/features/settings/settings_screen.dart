@@ -246,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(children: [
             SwitchListTile(
               title: const Text('Mensaje corto al compartir'),
-              subtitle: const Text('Ubicación, enlace y hora en 3 líneas (ideal para WhatsApp)'),
+              subtitle: const Text('Lugar, hora y enlace en 2 líneas (ideal para WhatsApp)'),
               value: _compact,
               onChanged: (v) {
                 setState(() => _compact = v);

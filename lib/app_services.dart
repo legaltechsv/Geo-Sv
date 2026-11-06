@@ -52,6 +52,7 @@ class AppServices {
   Future<void> init() async {
     await settings.load();
     await logo.load();
+    await templates.load();
     await channels.loadConfig();
     sync.start();
   }

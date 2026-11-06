@@ -208,6 +208,7 @@ class CaptureController extends ChangeNotifier {
     String? inspectionId,
     double? heading,
     Uint8List? logo,
+    Uint8List? mapImage,
     Future<String?> Function()? askActivity,
     String? segmentId,
     Future<String?> Function()? askPointRole,
@@ -273,6 +274,7 @@ class CaptureController extends ChangeNotifier {
           heading: heading,
           activity: activity,
           logo: logo,
+          mapImage: mapImage,
         ),
       );
 

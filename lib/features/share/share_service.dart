@@ -15,26 +15,26 @@ import '../capture/domain/capture_record.dart';
 
 /// Compartir evidencias y reportes.
 ///
-/// Mensaje CORTO (por defecto), pensado para WhatsApp: 3 líneas.
-///   📍 Barrio El Calvario, Cojutepeque
-///   https://maps.google.com/?q=13.71821,-88.93317
-///   05/11/26 21:34 · ±4 m · NE · Inspección
+/// Mensaje CORTO (por defecto), pensado para WhatsApp: 2 líneas.
+///   📍 Barrio San José, Cojutepeque · 05/11 23:40 · Inspección
+///   https://maps.google.com/?q=13.72045,-88.93607
 ///
 /// - `maps.google.com/?q=` es el enlace más corto que abre Google Maps
 ///   (app o web) en el punto exacto, sin acortadores externos.
 /// - 5 decimales ≈ 1 m: suficiente y más corto que 6.
 class ShareService {
   static String compactText(CaptureRecord r) {
-    final place = r.address == null
-        ? r.coordsText
-        : r.address!.split(',').take(2).map((e) => e.trim()).join(', ');
-    final details = [
-      DateFormat('dd/MM/yy HH:mm').format(r.time.local),
-      '±${r.accuracy.toStringAsFixed(0)} m',
-      if (r.heading != null) CompassService.cardinal(r.heading!),
-      if (r.activity != null) r.activity!,
-    ].join(' · ');
-    return '📍 $place\n${shortMapsUrl(r.latitude, r.longitude)}\n$details';
+    // Lugar corto: barrio + municipio, sin el Plus Code ("P3C7+5GH") ni el país.
+    final parts = (r.address ?? '')
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && !e.contains('+') && !RegExp(r'^\d').hasMatch(e))
+        .take(2)
+        .toList();
+    final place = parts.isEmpty ? 'Ubicación' : parts.join(', ');
+    final when = DateFormat('dd/MM HH:mm').format(r.time.local);
+    final act = r.activity == null ? '' : ' · ${r.activity}';
+    return '📍 $place · $when$act\n${shortMapsUrl(r.latitude, r.longitude)}';
   }
 
   static String shortMapsUrl(double lat, double lng) =>

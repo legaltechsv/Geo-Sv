@@ -27,6 +27,7 @@ class WatermarkData {
     this.heading,
     this.activity,
     this.logo,
+    this.mapImage,
   });
 
   final double latitude;
@@ -46,6 +47,9 @@ class WatermarkData {
 
   /// Logotipo PNG que se estampa en la esquina superior derecha.
   final Uint8List? logo;
+
+  /// Captura del mini mapa (PNG) tomada en el disparo.
+  final Uint8List? mapImage;
 
   /// Lo que codifica el QR: enlace universal a Google Maps.
   String get qrPayload => MapsLink.search(latitude, longitude);
@@ -204,8 +208,15 @@ class WatermarkService {
     qr.paint(canvas, Size.square(qrBox - qrQuiet * 2));
     canvas.restore();
 
-    // 6b. Logotipo en la esquina superior derecha, sobre fondo blanco
-    //     redondeado para que se lea sobre cualquier foto.
+    // 6b. Logotipo y mini mapa en las esquinas elegidas por el usuario.
+    //     Las esquinas inferiores quedan justo encima del panel de datos.
+    Rect place(OverlayPosition p, double bw, double bh) => Rect.fromLTWH(
+          p.isLeft ? pad : w - pad - bw,
+          p.isTop ? pad : panelTop - pad - bh,
+          bw,
+          bh,
+        );
+
     if (data.logo != null) {
       try {
         final lc = await ui.instantiateImageCodec(data.logo!);
@@ -215,7 +226,7 @@ class WatermarkService {
         final s = math.min(maxW / logo.width, maxH / logo.height);
         final lw = logo.width * s, lh = logo.height * s;
         final lpad = 1.4 * u;
-        final box = Rect.fromLTWH(w - pad - lw - lpad * 2, pad, lw + lpad * 2, lh + lpad * 2);
+        final box = place(cfg.logoPosition, lw + lpad * 2, lh + lpad * 2);
         canvas.drawRRect(RRect.fromRectAndRadius(box, Radius.circular(1.6 * u)),
             Paint()..color = const Color(0xE6FFFFFF));
         canvas.drawImageRect(
@@ -228,6 +239,33 @@ class WatermarkService {
       } catch (_) {
         // Un logo dañado nunca debe impedir guardar la evidencia.
       }
+    }
+
+    if (data.mapImage != null && cfg.showMap) {
+      try {
+        final mc = await ui.instantiateImageCodec(data.mapImage!);
+        final map = (await mc.getNextFrame()).image;
+        mc.dispose();
+        final side = 30 * u;
+        final box = place(cfg.mapPosition, side, side * map.height / map.width);
+        final rr = RRect.fromRectAndRadius(box, Radius.circular(2 * u));
+        canvas.save();
+        canvas.clipRRect(rr);
+        canvas.drawImageRect(
+          map,
+          Rect.fromLTWH(0, 0, map.width.toDouble(), map.height.toDouble()),
+          box,
+          Paint()..filterQuality = ui.FilterQuality.high,
+        );
+        canvas.restore();
+        canvas.drawRRect(
+            rr,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 0.5 * u
+              ..color = const Color(0xFFFFFFFF));
+        map.dispose();
+      } catch (_) {}
     }
 
     // 7. Rasterizar y pasar a RGBA crudo.

@@ -3,11 +3,13 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LogoException implements Exception {
@@ -48,6 +50,62 @@ class LogoService extends ValueNotifier<String?> {
     if (file == null) return false;
     await _store(await file.readAsBytes());
     return true;
+  }
+
+  /// Elegir un ARCHIVO de logotipo: PNG, JPG o PDF.
+  /// Si es PDF, se convierte su primera página en imagen.
+  Future<bool> pickFile() async {
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['png', 'jpg', 'jpeg', 'pdf'],
+      withData: true,
+    );
+    final f = res?.files.single;
+    if (f == null) return false;
+    final data = f.bytes ?? (f.path == null ? null : await File(f.path!).readAsBytes());
+    if (data == null) throw LogoException('No se pudo leer el archivo.');
+    if ((f.extension ?? '').toLowerCase() == 'pdf') {
+      await _store(await _pdfFirstPageToPng(data));
+    } else {
+      await _store(data);
+    }
+    return true;
+  }
+
+  /// Rasteriza la primera página del PDF y recorta el margen blanco.
+  Future<Uint8List> _pdfFirstPageToPng(Uint8List pdf) async {
+    try {
+      final page = await Printing.raster(pdf, pages: const [0], dpi: 200).first;
+      final png = await page.toPng();
+      return await Isolate.run(() {
+        final im = img.decodePng(png);
+        if (im == null) return png;
+        // Recortar bordes casi blancos para que el logo no quede con márgenes grandes.
+        var minX = im.width, minY = im.height, maxX = -1, maxY = -1;
+        for (var y = 0; y < im.height; y += 2) {
+          for (var x = 0; x < im.width; x += 2) {
+            final p = im.getPixel(x, y);
+            if (p.r < 245 || p.g < 245 || p.b < 245) {
+              if (x < minX) minX = x;
+              if (y < minY) minY = y;
+              if (x > maxX) maxX = x;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxX <= minX || maxY <= minY) return png;
+        final x0 = (minX - 8).clamp(0, im.width - 1);
+        final y0 = (minY - 8).clamp(0, im.height - 1);
+        final c = img.copyCrop(im,
+            x: x0,
+            y: y0,
+            width: (maxX - minX + 16).clamp(1, im.width - x0),
+            height: (maxY - minY + 16).clamp(1, im.height - y0));
+        return img.encodePng(c);
+      });
+    } catch (_) {
+      throw LogoException('No se pudo convertir el PDF. Prueba con una imagen PNG o JPG.');
+    }
   }
 
   /// Descargar el logo desde un enlace directo a la imagen

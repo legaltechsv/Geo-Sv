@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -17,6 +21,7 @@ import 'preview_screen.dart';
 import '../../segments/point_role_sheet.dart';
 import 'widgets/activity_sheet.dart';
 import 'widgets/compass_widget.dart';
+import 'widgets/live_mini_map.dart';
 import 'widgets/live_watermark_overlay.dart';
 import 'widgets/template_picker_sheet.dart';
 
@@ -68,6 +73,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   int? _countdown;
   bool _flashEffect = false;
 
+  /// Permite "fotografiar" el mini mapa al disparar para estamparlo en la foto.
+  final _mapKey = GlobalKey();
+
   // Zoom con pellizco
   double _zoom = 1, _zoomAtStart = 1, _minZoom = 1, _maxZoom = 1;
   bool _showZoom = false;
@@ -116,6 +124,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
     // El rumbo se toma EN el disparo (no después de contestar la actividad).
     final heading = services.compass.heading.value;
+    final mapImage = widget.templates.value.showMap ? await _snapshotMap() : null;
     final logo = await services.logo.bytes();
     HapticFeedback.mediumImpact();
     setState(() => _flashEffect = true); // destello blanco tipo obturador
@@ -128,6 +137,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         inspectionId: widget.inspectionId,
         heading: heading,
         logo: logo,
+        mapImage: mapImage,
         askActivity: services.settings.value.askActivity && mounted
             ? () => askActivity(context)
             : null,
@@ -157,6 +167,73 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
+
+  /// Captura el mini mapa (con su cono de dirección) como PNG.
+  Future<Uint8List?> _snapshotMap() async {
+    try {
+      final ro = _mapKey.currentContext?.findRenderObject();
+      if (ro is! RenderRepaintBoundary) return null;
+      final image = await ro.toImage(pixelRatio: 3);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return data?.buffer.asUint8List();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Logotipo y mini mapa en las esquinas que eligió el usuario.
+  List<Widget> _cornerOverlays(EdgeInsets pad) {
+    return [
+      ValueListenableBuilder<WatermarkConfig>(
+        valueListenable: widget.templates,
+        builder: (_, cfg, __) => Stack(children: [
+          // Logotipo
+          ValueListenableBuilder<String?>(
+            valueListenable: services.logo,
+            builder: (_, path, __) => path == null
+                ? const SizedBox.shrink()
+                : _corner(
+                    cfg.logoPosition,
+                    pad,
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Image.file(File(path), height: 38, fit: BoxFit.contain),
+                    ),
+                  ),
+          ),
+          // Mini mapa
+          if (cfg.showMap)
+            _corner(
+              cfg.mapPosition,
+              pad,
+              RepaintBoundary(
+                key: _mapKey,
+                child: ValueListenableBuilder<Position?>(
+                  valueListenable: c.livePosition,
+                  builder: (_, pos, __) => ValueListenableBuilder<double?>(
+                    valueListenable: services.compass.heading,
+                    builder: (_, h, __) => LiveMiniMap(position: pos, heading: h),
+                  ),
+                ),
+              ),
+            ),
+        ]),
+      ),
+    ];
+  }
+
+  Widget _corner(OverlayPosition p, EdgeInsets pad, Widget child) => Positioned(
+        top: p.isTop ? pad.top + 62 : null,
+        bottom: p.isTop ? null : pad.bottom + 340,
+        left: p.isLeft ? 14 : null,
+        right: p.isLeft ? null : 14,
+        child: child,
+      );
 
   void _openPreview(CaptureRecord r) => Navigator.of(context)
       .push(MaterialPageRoute(builder: (_) => PreviewScreen(record: r)));
@@ -251,30 +328,14 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 ]),
               ),
 
-              // 3b. Brújula (centro, bajo la barra superior) y logotipo (derecha)
+              // 3b. Brújula (centro) + logotipo y mini mapa en la esquina elegida
               Positioned(
                 top: pad.top + 62,
                 left: 0,
                 right: 0,
                 child: Center(child: CompassWidget(heading: services.compass.heading)),
               ),
-              Positioned(
-                top: pad.top + 62,
-                right: 14,
-                child: ValueListenableBuilder<String?>(
-                  valueListenable: services.logo,
-                  builder: (_, path, __) => path == null
-                      ? const SizedBox.shrink()
-                      : Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Image.file(File(path), height: 34, fit: BoxFit.contain),
-                        ),
-                ),
-              ),
+              ..._cornerOverlays(pad),
 
               // 4. Indicador de zoom
               if (_showZoom)
