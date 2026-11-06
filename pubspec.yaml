@@ -65,8 +65,6 @@ dependencies:
   flutter_compass: ^0.8.1
   # Generar reportes Word (.docx = ZIP con XML)
   archive: '>=3.6.0 <5.0.0'
-  # Canales en tiempo real (mensajes, fotos y ubicación en vivo)
-  supabase_flutter: ^2.8.0
 
 dev_dependencies:
   flutter_test:
