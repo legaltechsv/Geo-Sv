@@ -13,6 +13,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../../app_services.dart';
 import '../../../core/permissions/permission_service.dart';
+import '../../../core/ui/glass.dart';
 import '../../templates/watermark_template.dart';
 import '../application/capture_controller.dart';
 import '../domain/capture_record.dart';
@@ -72,6 +73,66 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   int _timerSeconds = 0; // 0 / 3 / 10
   int? _countdown;
   bool _flashEffect = false;
+
+  /// Fotos tomadas desde que se abrió el visor (modo libre).
+  int _sessionPhotos = 0;
+
+  /// null = aún no se pregunta; true = las siguientes son de APOYO
+  /// (solo coordenadas, sin QR); false = todas con ubicación para compartir.
+  bool? _supportMode;
+
+  /// Solo en modo libre (no inspección / tramo / canal).
+  bool get _freeMode =>
+      widget.inspectionId == null && widget.segmentId == null && !widget.returnOnCapture;
+
+  /// "¿Las siguientes fotos son de apoyo?"
+  Future<bool> _askSupportMode() async {
+    final r = await showGlassSheet<bool>(
+      context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Foto principal guardada',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('Esta foto lleva el QR y es la que se envía para ubicar el lugar. '
+              '¿Cómo quieres las siguientes fotos?',
+              style: TextStyle(color: AppColors.textMuted, height: 1.35)),
+          const SizedBox(height: 16),
+          GlassCard(
+            margin: const EdgeInsets.only(bottom: 10),
+            onTap: () => Navigator.pop(ctx, true),
+            child: const Row(children: [
+              Icon(Icons.photo_library_outlined, color: AppColors.cyan),
+              SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Solo de apoyo al reporte', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  Text('Con coordenadas, sin QR. Se toman seguidas sin abrir cada una.',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                ]),
+              ),
+            ]),
+          ),
+          GlassCard(
+            onTap: () => Navigator.pop(ctx, false),
+            child: const Row(children: [
+              Icon(Icons.share_location, color: AppColors.teal),
+              SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Todas para enviar ubicación', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  Text('Cada foto con QR y opción de compartir.',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                ]),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+    return r ?? true;
+  }
 
   /// Permite "fotografiar" el mini mapa al disparar para estamparlo en la foto.
   final _mapKey = GlobalKey();
@@ -143,8 +204,22 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             : null,
         segmentId: widget.segmentId,
         askPointRole: widget.segmentId == null ? null : () => askPointRole(context),
+        support: _freeMode && _supportMode == true && _sessionPhotos > 0,
       );
       if (!mounted) return;
+      _sessionPhotos++;
+      if (_freeMode && _sessionPhotos == 1 && _supportMode == null) {
+        final mode = await _askSupportMode();
+        if (!mounted) return;
+        setState(() => _supportMode = mode);
+      }
+      if (record.support) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Foto de apoyo $_sessionPhotos guardada (con coordenadas)'),
+          duration: const Duration(seconds: 1),
+        ));
+        return;
+      }
       if (widget.returnOnCapture) {
         Navigator.pop(context, record);
         return;
@@ -319,6 +394,13 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                   ),
                   const Spacer(),
                   _GpsChip(position: c.livePosition),
+                  if (_freeMode && _supportMode != null) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => setState(() => _supportMode = !_supportMode!),
+                      child: _Pill(text: _supportMode! ? 'APOYO' : 'PRINCIPAL'),
+                    ),
+                  ],
                   const Spacer(),
                   _RoundIcon(
                     icon: Icons.tune,

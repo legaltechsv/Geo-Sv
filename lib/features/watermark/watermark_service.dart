@@ -28,6 +28,7 @@ class WatermarkData {
     this.activity,
     this.logo,
     this.mapImage,
+    this.support = false,
   });
 
   final double latitude;
@@ -50,6 +51,9 @@ class WatermarkData {
 
   /// Captura del mini mapa (PNG) tomada en el disparo.
   final Uint8List? mapImage;
+
+  /// Foto de apoyo: sin QR (la ubicación se comparte con la foto principal).
+  final bool support;
 
   /// Lo que codifica el QR: enlace universal a Google Maps.
   String get qrPayload => MapsLink.search(latitude, longitude);
@@ -88,7 +92,7 @@ class WatermarkService {
     //    una foto de 2 MP o de 50 MP, vertical u horizontal.
     final u = math.min(w, h) / 100;
     final pad = 3 * u;
-    final qrBox = 24 * u; // QR + margen blanco ("quiet zone")
+    final qrBox = data.support ? 0.0 : 24 * u; // QR + margen blanco ("quiet zone")
     final qrQuiet = 1.6 * u;
     final textMaxW = w - qrBox - pad * 3 - 2.6 * u;
 
@@ -121,6 +125,7 @@ class WatermarkService {
         data.address ?? 'Sin conexión · coordenadas exactas',
       if (cfg.hasNote && !minimal) 'Nota: ${cfg.note.trim()}',
       if (!minimal) '${data.time.tzLabel} · ${data.time.source.label}',
+      if (data.support) 'Foto de apoyo',
       '${data.brandLabel} · Código ${data.verificationCode}',
     ];
     final body = _text(lines.join('\n'),
@@ -183,6 +188,7 @@ class WatermarkService {
     y += date.height + 1.5 * u;
     body.paint(canvas, Offset(textLeft, y));
 
+    if (!data.support) {
     // 6. QR sobre fondo blanco (los lectores fallan sin margen claro).
     final qrLeft = w - pad - qrBox;
     final qrTop = panelTop + headerH + pad + (contentH - qrBox) / 2;
@@ -207,6 +213,7 @@ class WatermarkService {
     canvas.translate(qrLeft + qrQuiet, qrTop + qrQuiet);
     qr.paint(canvas, Size.square(qrBox - qrQuiet * 2));
     canvas.restore();
+    }
 
     // 6b. Logotipo y mini mapa en las esquinas elegidas por el usuario.
     //     Las esquinas inferiores quedan justo encima del panel de datos.

@@ -22,6 +22,7 @@ class CaptureRecord {
     this.activity,
     this.segmentId,
     this.pointRole,
+    this.support = false,
   });
 
   final String id;
@@ -58,6 +59,10 @@ class CaptureRecord {
   final String? segmentId;
   final String? pointRole;
 
+  /// Foto de APOYO: solo documenta con coordenadas (sin QR ni envío de
+  /// ubicación). La foto PRINCIPAL es la que sirve para ubicar el lugar.
+  final bool support;
+
   bool get addressPending => address == null;
   String get mapsUrl => MapsLink.search(latitude, longitude);
   String get directionsUrl => MapsLink.directions(latitude, longitude);
@@ -82,6 +87,7 @@ class CaptureRecord {
         activity: activity,
         segmentId: segmentId,
         pointRole: pointRole,
+        support: support,
       );
 
   Map<String, Object?> toMap() => {
@@ -103,6 +109,7 @@ class CaptureRecord {
         'activity': activity,
         'segment_id': segmentId,
         'point_role': pointRole,
+        'support': support ? 1 : 0,
       };
 
   factory CaptureRecord.fromMap(Map<String, Object?> m) => CaptureRecord(
@@ -123,5 +130,6 @@ class CaptureRecord {
         activity: m['activity'] as String?,
         segmentId: m['segment_id'] as String?,
         pointRole: m['point_role'] as String?,
+        support: (m['support'] as int? ?? 0) == 1,
       );
 }

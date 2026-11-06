@@ -102,6 +102,16 @@ class _Tile extends StatelessWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 11)),
           ),
         ),
+        if (record.support)
+          Positioned(
+            left: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              color: Colors.black54,
+              child: const Text('APOYO', style: TextStyle(color: Colors.white, fontSize: 9)),
+            ),
+          ),
         if (record.addressPending)
           const Positioned(
             right: 4,

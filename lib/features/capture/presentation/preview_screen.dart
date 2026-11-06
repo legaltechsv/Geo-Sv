@@ -41,6 +41,18 @@ class PreviewScreen extends StatelessWidget {
               child: InteractiveViewer(child: Image.file(File(r.filePath))),
             ),
             const SizedBox(height: 12),
+            if (r.support)
+              const GlassCard(
+                margin: EdgeInsets.only(bottom: 12),
+                child: Row(children: [
+                  Icon(Icons.photo_library_outlined, color: AppColors.cyan),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text('Foto de apoyo al reporte: lleva coordenadas, sin QR. '
+                        'La foto principal es la que se envía para ubicar el lugar.'),
+                  ),
+                ]),
+              ),
             if (r.addressPending)
               const GlassCard(
                 margin: EdgeInsets.only(bottom: 12),

@@ -85,3 +85,44 @@ if MARK not in g:
     g = (g[:i] + snippet + g[i:]) if i >= 0 else (g + "\n" + snippet)
     target.write_text(g, encoding="utf-8")
     print(f"compileSdk de plugins forzado en {target}")
+
+# ── Firma fija con tool/signing/debug.keystore ──────────────────────────────
+# Sin esto, cada compilación en la nube usa una clave distinta y Android no
+# deja instalar una versión encima de la anterior ("App no instalada").
+SIGN_MARK = "// geomark: firma fija"
+app_kts = pathlib.Path("android/app/build.gradle.kts")
+app_groovy = pathlib.Path("android/app/build.gradle")
+if app_kts.exists():
+    t = app_kts.read_text(encoding="utf-8")
+    if SIGN_MARK not in t:
+        block = f"""android {{
+    {SIGN_MARK}
+    signingConfigs {{
+        getByName("debug") {{
+            storeFile = file("../../tool/signing/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }}
+    }}
+"""
+        t = t.replace("android {\n", block, 1)
+        app_kts.write_text(t, encoding="utf-8")
+        print("Firma fija configurada (kts)")
+elif app_groovy.exists():
+    t = app_groovy.read_text(encoding="utf-8")
+    if SIGN_MARK not in t:
+        block = f"""android {{
+    {SIGN_MARK}
+    signingConfigs {{
+        debug {{
+            storeFile file("../../tool/signing/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }}
+    }}
+"""
+        t = t.replace("android {\n", block, 1)
+        app_groovy.write_text(t, encoding="utf-8")
+        print("Firma fija configurada (groovy)")
