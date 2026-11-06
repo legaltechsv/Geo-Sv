@@ -1,0 +1,56 @@
+# Compila el APK de Android en la nube cada vez que se sube código a main.
+# Resultado: pestaña "Releases" del repositorio -> descargar app-release.apk
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # botón "Run workflow" en la pestaña Actions
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generar carpeta Android y aplicar permisos
+        run: |
+          flutter create --org com.geomark --project-name geomark --platforms android .
+          rm -f test/widget_test.dart
+          python3 tool/patch_android.py
+
+      - name: Descargar dependencias
+        run: flutter pub get
+
+      - name: Análisis de código (informativo)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
+
+      - name: Compilar APK
+        run: flutter build apk --release
+
+      - name: Guardar APK como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: geomark-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Publicar en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: GeoMark build ${{ github.run_number }}
+          body: Descarga app-release.apk en tu teléfono Android e instálala.
+          files: build/app/outputs/flutter-apk/app-release.apk

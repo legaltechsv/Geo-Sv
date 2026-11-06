@@ -1,0 +1,452 @@
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
+
+import 'package:image/image.dart' as img;
+import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
+import '../capture/domain/capture_record.dart';
+import '../inspections/domain/checklist_templates.dart';
+import '../inspections/domain/inspection.dart';
+import '../settings/settings_service.dart';
+import '../visits/visits_service.dart';
+
+/// Genera los reportes PDF (formato carta), 100 % offline.
+///
+/// - Informe de inspección: datos generales + QR al lugar, resumen de
+///   cumplimiento, hallazgos, checklist, observaciones, fotos y firma.
+/// - Reporte de lugares visitados: resumen, tabla por lugar con enlace
+///   a Google Maps y detalle cronológico de visitas.
+class ReportService {
+  static final _dt = DateFormat('dd/MM/yyyy HH:mm');
+  static final _d = DateFormat('dd/MM/yyyy');
+
+  static const _ink = PdfColor.fromInt(0xFF0B1020);
+  static const _muted = PdfColor.fromInt(0xFF5B6478);
+  static const _line = PdfColor.fromInt(0xFFDDE1EA);
+  static const _soft = PdfColor.fromInt(0xFFF3F5F9);
+  static const _accent = PdfColor.fromInt(0xFF2563EB);
+
+  static PdfColor _resultColor(ItemResult r) => switch (r) {
+        ItemResult.cumple => const PdfColor.fromInt(0xFF16A34A),
+        ItemResult.noCumple => const PdfColor.fromInt(0xFFDC2626),
+        ItemResult.noAplica => _muted,
+        ItemResult.pendiente => const PdfColor.fromInt(0xFFD97706),
+      };
+
+  static String _dur(Duration d) =>
+      d.inHours > 0 ? '${d.inHours} h ${d.inMinutes % 60} min' : '${d.inMinutes} min';
+
+  static DateTime _local(DateTime utc) => utc.toLocal();
+
+  // ───────────────────────── Informe de inspección ─────────────────────────
+
+  Future<Uint8List> inspectionReport({
+    required Inspection inspection,
+    required List<ChecklistItem> items,
+    required List<CaptureRecord> photos,
+    required AppSettings settings,
+  }) async {
+    final t = ChecklistTemplates.byKey(inspection.templateKey);
+    final sum = ComplianceSummary(items);
+    final findings = items.where((i) => i.isFinding).toList()
+      ..sort((a, b) => (b.severity?.index ?? 0).compareTo(a.severity?.index ?? 0));
+
+    // Fotos reducidas a ~900 px para que el PDF pese poco (WhatsApp/correo).
+    final thumbs = <(CaptureRecord, pw.MemoryImage)>[];
+    for (final p in photos) {
+      final f = File(p.filePath);
+      if (!await f.exists()) continue;
+      final small = await _downscale(await f.readAsBytes());
+      thumbs.add((p, pw.MemoryImage(small)));
+    }
+
+    pw.MemoryImage? signature;
+    if (inspection.signaturePath != null && await File(inspection.signaturePath!).exists()) {
+      signature = pw.MemoryImage(await File(inspection.signaturePath!).readAsBytes());
+    }
+
+    final doc = pw.Document(
+      title: 'Informe ${inspection.folio}',
+      author: settings.inspectorName,
+      creator: 'GeoMark',
+    );
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
+        header: (ctx) => _header(settings, 'INFORME DE INSPECCIÓN', inspection.folio),
+        footer: _footer,
+        build: (ctx) => [
+          // Datos generales + QR
+          pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Expanded(
+              child: _kvTable([
+                ('Tipo', t.name),
+                ('Lugar', inspection.siteName),
+                ('Dirección', inspection.address ?? 'No disponible (capturado sin conexión)'),
+                ('Coordenadas', '${inspection.coordsText}  (±${inspection.accuracy.toStringAsFixed(0)} m)'),
+                ('Atendido por', inspection.attendedBy.isEmpty ? '—' : inspection.attendedBy),
+                ('Inspector', inspection.inspectorName.isEmpty ? settings.inspectorName : inspection.inspectorName),
+                ('Inicio', _dt.format(_local(inspection.startedAtUtc))),
+                ('Fin', inspection.endedAtUtc == null ? 'En curso' : _dt.format(_local(inspection.endedAtUtc!))),
+                ('Duración', _dur(inspection.duration)),
+              ]),
+            ),
+            pw.SizedBox(width: 16),
+            pw.Column(children: [
+              pw.BarcodeWidget(
+                barcode: pw.Barcode.qrCode(),
+                data: inspection.mapsUrl,
+                width: 92,
+                height: 92,
+              ),
+              pw.SizedBox(height: 4),
+              pw.UrlLink(
+                destination: inspection.mapsUrl,
+                child: pw.Text('Abrir en Google Maps',
+                    style: const pw.TextStyle(fontSize: 8, color: _accent)),
+              ),
+            ]),
+          ]),
+          pw.SizedBox(height: 16),
+
+          // Resumen
+          _sectionTitle('Resumen de cumplimiento'),
+          pw.Row(children: [
+            _metric('${(sum.percent * 100).toStringAsFixed(0)} %', 'Cumplimiento'),
+            _metric('${sum.cumple}', 'Cumple'),
+            _metric('${sum.noCumple}', 'No cumple'),
+            _metric('${sum.noAplica}', 'No aplica'),
+            _metric('${sum.criticos}', 'Críticos'),
+          ]),
+          pw.SizedBox(height: 16),
+
+          // Hallazgos
+          if (findings.isNotEmpty) ...[
+            _sectionTitle('Hallazgos (${findings.length})'),
+            ...findings.map((f) => pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 6),
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border(
+                        left: pw.BorderSide(
+                            color: _resultColor(ItemResult.noCumple), width: 3)),
+                    color: _soft,
+                  ),
+                  child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    pw.Text('${f.section} · ${f.question}',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    pw.Text('Gravedad: ${f.severity?.label ?? 'Sin clasificar'}',
+                        style: const pw.TextStyle(fontSize: 9, color: _muted)),
+                    if (f.note.isNotEmpty)
+                      pw.Text(f.note, style: const pw.TextStyle(fontSize: 9)),
+                  ]),
+                )),
+            pw.SizedBox(height: 10),
+          ],
+
+          // Checklist completo por sección
+          _sectionTitle('Lista de verificación'),
+          ..._checklistTables(items),
+          pw.SizedBox(height: 12),
+
+          if (inspection.generalNotes.trim().isNotEmpty) ...[
+            _sectionTitle('Observaciones generales'),
+            pw.Text(inspection.generalNotes, style: const pw.TextStyle(fontSize: 10)),
+            pw.SizedBox(height: 12),
+          ],
+
+          // Evidencias fotográficas
+          if (thumbs.isNotEmpty) ...[
+            _sectionTitle('Evidencias fotográficas (${thumbs.length})'),
+            pw.Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: thumbs
+                  .map((e) => pw.SizedBox(
+                        width: 165,
+                        child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                          pw.ClipRRect(
+                            horizontalRadius: 4,
+                            verticalRadius: 4,
+                            child: pw.Image(e.$2, height: 124, width: 165, fit: pw.BoxFit.cover),
+                          ),
+                          pw.SizedBox(height: 3),
+                          pw.Text(_dt.format(_local(e.$1.capturedAtUtc)),
+                              style: const pw.TextStyle(fontSize: 8)),
+                          pw.UrlLink(
+                            destination: e.$1.mapsUrl,
+                            child: pw.Text(e.$1.coordsText,
+                                style: const pw.TextStyle(fontSize: 8, color: _accent)),
+                          ),
+                          pw.Text('Código ${e.$1.verificationCode}',
+                              style: const pw.TextStyle(fontSize: 7, color: _muted)),
+                        ]),
+                      ))
+                  .toList(),
+            ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // Firmas
+          _sectionTitle('Firmas'),
+          pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+            pw.Expanded(
+              child: _signatureBlock(
+                signature,
+                inspection.inspectorName.isEmpty ? settings.inspectorName : inspection.inspectorName,
+                settings.inspectorRole.isEmpty ? 'Inspector' : settings.inspectorRole,
+              ),
+            ),
+            pw.SizedBox(width: 30),
+            pw.Expanded(
+              child: _signatureBlock(null,
+                  inspection.attendedBy.isEmpty ? ' ' : inspection.attendedBy, 'Atendido por'),
+            ),
+          ]),
+        ],
+      ),
+    );
+    return doc.save();
+  }
+
+  List<pw.Widget> _checklistTables(List<ChecklistItem> items) {
+    final sections = <String, List<ChecklistItem>>{};
+    for (final i in items) {
+      sections.putIfAbsent(i.section, () => []).add(i);
+    }
+    return [
+      for (final e in sections.entries) ...[
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 6, bottom: 4),
+          child: pw.Text(e.key,
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _ink)),
+        ),
+        pw.Table(
+          border: const pw.TableBorder(
+              horizontalInside: pw.BorderSide(color: _line, width: 0.5),
+              bottom: pw.BorderSide(color: _line, width: 0.5)),
+          columnWidths: const {
+            0: pw.FlexColumnWidth(5),
+            1: pw.FlexColumnWidth(1.4),
+            2: pw.FlexColumnWidth(3),
+          },
+          children: [
+            for (final i in e.value)
+              pw.TableRow(
+                verticalAlignment: pw.TableCellVerticalAlignment.middle,
+                children: [
+                  pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                      child: pw.Text(i.question, style: const pw.TextStyle(fontSize: 9))),
+                  pw.Text(i.result.label,
+                      style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _resultColor(i.result))),
+                  pw.Text(
+                      [if (i.severity != null && i.isFinding) i.severity!.label, if (i.note.isNotEmpty) i.note]
+                          .join(' · '),
+                      style: const pw.TextStyle(fontSize: 8, color: _muted)),
+                ],
+              ),
+          ],
+        ),
+      ],
+    ];
+  }
+
+  // ───────────────────────── Reporte de lugares visitados ─────────────────────────
+
+  Future<Uint8List> visitsReport({
+    required List<VisitedPlace> places,
+    required VisitRange range,
+    required AppSettings settings,
+  }) async {
+    final totalVisits = places.fold<int>(0, (a, p) => a + p.visits.length);
+    final totalPhotos = places.fold<int>(0, (a, p) => a + p.photos.length);
+    final totalTime = places.fold<Duration>(Duration.zero, (a, p) => a + p.totalTime);
+    final allVisits = [for (final p in places) ...p.visits]
+      ..sort((a, b) => a.startedAtUtc.compareTo(b.startedAtUtc));
+
+    final doc = pw.Document(title: 'Reporte de lugares visitados', creator: 'GeoMark');
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
+        header: (ctx) => _header(settings, 'REPORTE DE LUGARES VISITADOS',
+            'Periodo: ${range.label} · ${_d.format(DateTime.now())}'),
+        footer: _footer,
+        build: (ctx) => [
+          pw.Row(children: [
+            _metric('${places.length}', 'Lugares'),
+            _metric('$totalVisits', 'Visitas'),
+            _metric('$totalPhotos', 'Fotos'),
+            _metric(_dur(totalTime), 'Tiempo en sitio'),
+          ]),
+          pw.SizedBox(height: 16),
+          _sectionTitle('Lugares'),
+          pw.TableHelper.fromTextArray(
+            headers: ['#', 'Lugar', 'Visitas', 'Fotos', 'Tiempo', 'Última visita', 'Mapa'],
+            data: [
+              for (var i = 0; i < places.length; i++)
+                [
+                  '${i + 1}',
+                  '${places[i].name}${places[i].address == null ? '' : '\n${places[i].address}'}',
+                  '${places[i].visits.length}',
+                  '${places[i].photos.length}',
+                  _dur(places[i].totalTime),
+                  _dt.format(_local(places[i].lastVisit)),
+                  '${places[i].latitude.toStringAsFixed(5)},\n${places[i].longitude.toStringAsFixed(5)}',
+                ],
+            ],
+            headerStyle: pw.TextStyle(
+                fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: _ink),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            oddRowDecoration: const pw.BoxDecoration(color: _soft),
+            columnWidths: const {
+              0: pw.FixedColumnWidth(18),
+              1: pw.FlexColumnWidth(4),
+              2: pw.FlexColumnWidth(1.2),
+              3: pw.FlexColumnWidth(1),
+              4: pw.FlexColumnWidth(1.6),
+              5: pw.FlexColumnWidth(2),
+              6: pw.FlexColumnWidth(2),
+            },
+            cellAlignments: {
+              0: pw.Alignment.center,
+              2: pw.Alignment.center,
+              3: pw.Alignment.center,
+            },
+          ),
+          pw.SizedBox(height: 6),
+          // Enlaces tocables a cada lugar (el PDF los abre en Maps)
+          pw.Wrap(spacing: 8, runSpacing: 4, children: [
+            for (var i = 0; i < places.length; i++)
+              pw.UrlLink(
+                destination:
+                    'https://www.google.com/maps/search/?api=1&query=${places[i].latitude},${places[i].longitude}',
+                child: pw.Text('[${i + 1}] Ver en Maps',
+                    style: const pw.TextStyle(fontSize: 8, color: _accent)),
+              ),
+          ]),
+          if (allVisits.isNotEmpty) ...[
+            pw.SizedBox(height: 16),
+            _sectionTitle('Detalle cronológico de visitas'),
+            pw.TableHelper.fromTextArray(
+              headers: ['Folio', 'Fecha', 'Lugar', 'Tipo', 'Duración', 'Estado'],
+              data: [
+                for (final v in allVisits)
+                  [
+                    v.folio,
+                    _dt.format(_local(v.startedAtUtc)),
+                    v.siteName,
+                    ChecklistTemplates.byKey(v.templateKey).name,
+                    _dur(v.duration),
+                    v.status.label,
+                  ],
+              ],
+              headerStyle:
+                  pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: _ink),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              oddRowDecoration: const pw.BoxDecoration(color: _soft),
+            ),
+          ],
+        ],
+      ),
+    );
+    return doc.save();
+  }
+
+  // ───────────────────────── Piezas comunes ─────────────────────────
+
+  pw.Widget _header(AppSettings s, String title, String right) => pw.Container(
+        margin: const pw.EdgeInsets.only(bottom: 14),
+        padding: const pw.EdgeInsets.only(bottom: 8),
+        decoration: const pw.BoxDecoration(
+            border: pw.Border(bottom: pw.BorderSide(color: _ink, width: 1.5))),
+        child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+          pw.Expanded(
+            child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+              pw.Text(s.institution.isEmpty ? 'Institución' : s.institution.toUpperCase(),
+                  style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _ink)),
+              if (s.department.isNotEmpty)
+                pw.Text(s.department, style: const pw.TextStyle(fontSize: 9, color: _muted)),
+              pw.SizedBox(height: 4),
+              pw.Text(title,
+                  style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: _accent)),
+            ]),
+          ),
+          pw.Text(right, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+        ]),
+      );
+
+  pw.Widget _footer(pw.Context ctx) => pw.Container(
+        margin: const pw.EdgeInsets.only(top: 10),
+        child: pw.Row(children: [
+          pw.Text('Generado con GeoMark · ${_dt.format(DateTime.now())}',
+              style: const pw.TextStyle(fontSize: 7, color: _muted)),
+          pw.Spacer(),
+          pw.Text('Página ${ctx.pageNumber} de ${ctx.pagesCount}',
+              style: const pw.TextStyle(fontSize: 7, color: _muted)),
+        ]),
+      );
+
+  pw.Widget _sectionTitle(String t) => pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 6),
+        child: pw.Text(t,
+            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: _ink)),
+      );
+
+  pw.Widget _metric(String value, String label) => pw.Expanded(
+        child: pw.Container(
+          margin: const pw.EdgeInsets.only(right: 6),
+          padding: const pw.EdgeInsets.all(8),
+          decoration: const pw.BoxDecoration(
+              color: _soft, borderRadius: pw.BorderRadius.all(pw.Radius.circular(4))),
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text(value, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.Text(label, style: const pw.TextStyle(fontSize: 8, color: _muted)),
+          ]),
+        ),
+      );
+
+  pw.Widget _kvTable(List<(String, String)> rows) => pw.Table(
+        columnWidths: const {0: pw.FixedColumnWidth(80), 1: pw.FlexColumnWidth()},
+        children: [
+          for (final r in rows)
+            pw.TableRow(children: [
+              pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
+                  child: pw.Text(r.$1, style: const pw.TextStyle(fontSize: 9, color: _muted))),
+              pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
+                  child: pw.Text(r.$2, style: const pw.TextStyle(fontSize: 9))),
+            ]),
+        ],
+      );
+
+  pw.Widget _signatureBlock(pw.MemoryImage? img, String name, String role) =>
+      pw.Column(children: [
+        pw.SizedBox(
+            height: 60,
+            child: img == null ? pw.SizedBox() : pw.Image(img, fit: pw.BoxFit.contain)),
+        pw.Container(height: 0.8, color: _ink),
+        pw.SizedBox(height: 3),
+        pw.Text(name, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+        pw.Text(role, style: const pw.TextStyle(fontSize: 8, color: _muted)),
+      ]);
+
+  static Future<Uint8List> _downscale(Uint8List jpeg) => Isolate.run(() {
+        final im = img.decodeJpg(jpeg);
+        if (im == null) return jpeg;
+        final r = im.width > 900 ? img.copyResize(im, width: 900) : im;
+        return img.encodeJpg(r, quality: 72);
+      });
+}

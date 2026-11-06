@@ -1,0 +1,65 @@
+name: geomark
+description: Documentación fotográfica en campo con enrutamiento GPS (foto -> Google Maps).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: '>=3.27.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Cámara propia (visor in-app, sin galería)
+  camera: ^0.11.0
+
+  # GPS de alta precisión + detección de ubicación simulada
+  geolocator: ^13.0.1
+  # Reverse geocoding (lat/lng -> dirección) usando el geocoder nativo del SO
+  geocoding: ^3.0.0
+
+  # Permisos de cámara (la ubicación se gestiona con geolocator)
+  permission_handler: ^11.3.1
+
+  # QR (se genera 100% offline, es solo texto codificado)
+  qr_flutter: ^4.1.0
+  # Codificación JPEG en un isolate
+  image: ^4.2.0
+  # Escritura de metadatos EXIF (GPS) en el .jpg final
+  native_exif: ^0.6.0
+
+  # Compartir imagen + texto/enlace a WhatsApp, Telegram, correo...
+  share_plus: ^11.0.0
+  url_launcher: ^6.3.0
+
+  # Almacenamiento local / modo offline
+  path_provider: ^2.1.4
+  path: ^1.9.0
+  sqflite: ^2.3.3
+  connectivity_plus: ^6.0.5
+
+  # Hora de red (NTP) y huella de verificación
+  ntp: ^2.0.0
+  crypto: ^3.0.5
+  intl: ^0.19.0
+  uuid: ^4.4.2
+
+  # Reportes PDF (inspección y visitas) + vista previa / compartir / imprimir
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  # Firma del inspector / del responsable atendido
+  signature: ^5.5.0
+  # Mapa de lugares visitados (OpenStreetMap, sin API key)
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  # Ajustes (institución, inspector)
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
